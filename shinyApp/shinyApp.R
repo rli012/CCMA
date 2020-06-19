@@ -195,12 +195,13 @@ tab_home <- fluidRow(
     
     hr(),
     
-    valueBox(value = '58', color = 'orange', width = 3,
+    valueBox(value = '21', color = 'teal', width = 3,
+             subtitle = tags$p(strong("Cancer types"), style = "font-size: 200%;"),  icon = icon("dna")),
+    valueBox(value = '80', color = 'teal', width = 3,
              subtitle = tags$p(strong("Studies"), style = "font-size: 200%;"), icon = icon("database")),
-    valueBox(value = '10,072', color = 'orange', width = 3,
-             subtitle = tags$p(strong("Samples"), style = "font-size: 200%;"),  icon = icon("user-circle")),
-    valueBox(value = '30', color = 'orange', width = 3,
-             subtitle = tags$p(strong("Cancer types"), style = "font-size: 200%;"),  icon = icon("dna"))
+    valueBox(value = '26,072', color = 'teal', width = 3,
+             subtitle = tags$p(strong("Samples"), style = "font-size: 200%;"),  icon = icon("user-circle"))
+    
     
   ),
   
@@ -241,48 +242,65 @@ tab_home <- fluidRow(
 
 mir.default <- 'MIMAT0000062' # hsa-let-7a-5p
 
-mir.annotation <- readRDS('shinyApp/data/mir22.RDS')
-colnames(mir.annotation) <- c('mir_id', 'mir_name', 'mir_seq')
+mir.annotation <- readRDS('shinyApp/data/miRBase_10.0_22.RDS')
+#colnames(mir.annotation) <- c('mir_id', 'mir_name', 'mir_seq')
 
-mir.id <- selectizeInput(inputId = "mir.id", label=h4(strong('miRNA')), 
+mir.id <- selectizeInput(inputId = "mir.id", label=strong('miRNA'),# h4(strong('miRNA'))
                          choices = NULL, selected = mir.default, 
                          multiple = FALSE, width = 300,
                          options = list(placeholder = 'Select a miRNA',
                                         server = TRUE, selectOnTab=TRUE,
-                                        searchField = c('mir_name', 'mir_id'),
-                                        labelField = "mir_name",
-                                        valueField = "mir_id",
+                                        searchField = c('Name', 'ID', 'Previous_ID'),
+                                        labelField = "Name",
+                                        valueField = "ID",
                                         #maxOptions = 5,
                                         render = I("{option: function(item, escape) 
-                                                      {var gene = '<div>' + '<strong>' + escape(item.mir_name) + '</strong>' + '<ul>';
-                                                         gene = gene + '<li>' + 'ID: ' + item.mir_id + '</li>' + '</ul>' + '</div>';
+                                                      {var gene = '<div>' + '<strong>' + escape(item.Name) + '</strong>' + '<ul>';
+                                                         gene = gene + '<li>' + 'Previous IDs:' + item.Previous_ID + '</li>';
+                                                         gene = gene + '<li>' + 'Accession: ' + item.ID + '</li>' + '</ul>' + '</div>';
                                                          return gene
                                                       }
                                                     }")
                           ))
 
 
+datasets <- readRDS('shinyApp/data/CCMA_Datasets.RDS')
+
 
 tab_browser <- fluidRow(
   box(
-    title = NULL, status = "primary", solidHeader = FALSE, collapsible = FALSE,
+    title = 'Select a miRNA', status = "primary", solidHeader = TRUE, collapsible = FALSE,
     width = 12, 
     
     mir.id,
     hr(),
 
     strong(uiOutput("mir.name")),
+    strong(textOutput("mir.preid")),
     strong(textOutput("mir.info")),
     strong(textOutput("mir.seq")),
     strong(uiOutput("mir.targets"))
     
     #strong("Targets: ", a("ENCORI", href = textOutput('mir.encori'), style = "font-size: 100%;"))
 
-    )
+    ),
+  
+  box(
+    title = 'Select a dataset', status = "primary", solidHeader = TRUE, collapsible = FALSE,
+    width = 12, 
+    
+    DT::dataTableOutput("browser_datasets")
+  ),
+  
+  box(
+    title = 'miRNA expression in TCGA', status = "primary", solidHeader = TRUE, collapsible = FALSE,
+    width = 12#, 
+    
+    #DT::dataTableOutput("browser_datasets")
   )
-
-
-datasets <- readRDS('shinyApp/data/CCMA_Datasets.RDS')
+  
+  
+  )
 
 
 tab_datasets <- fluidRow(
@@ -296,7 +314,7 @@ tab_datasets <- fluidRow(
   
   
   box(
-    title = 'Differential Expression', status = "primary", solidHeader = TRUE, collapsible = TRUE,
+    title = 'Dataset-level Analysis', status = "primary", solidHeader = TRUE, collapsible = TRUE,
     width = 12,
     
     tabBox(width = 12, id = 'degbox',
@@ -452,7 +470,7 @@ tab_datasets <- fluidRow(
                     #             plotOutput('pie_gleason')),
   ),
   
-  tabPanel(title = "Sample Type", value = 'sample_type',
+  tabPanel(title = "Differential Expression Analysis", value = 'sample_type',
            checkboxGroupInput(inputId = "control_sample_type", label = "Control group",
                               choices = c('Normal', 
                                           'Primary Tumor' = 'Primary',
@@ -481,7 +499,7 @@ tab_datasets <- fluidRow(
            
   ),
   
-  tabPanel("Gleason Score", 
+  tabPanel("Highly Expressed miRNAs", 
            radioButtons(inputId = "gleason_control", label = "Control group",
                         c('6=3+3', '7=3+4','7=4+3','8=4+4','9=4+5','9=5+4','10=5+5'),
                         inline = TRUE),
@@ -490,16 +508,7 @@ tab_datasets <- fluidRow(
                         inline = TRUE)
   ),
   
-  tabPanel("Pathological T Stage", 
-           radioButtons(inputId = "stage_control", label = "Control group",
-                        c('Stage I', 'Stage II','Stage III','Stage IV'),
-                        inline = TRUE),
-           radioButtons(inputId = "stage_case", label = "Case group",
-                        c('Stage I', 'Stage II','Stage III','Stage IV'),
-                        inline = TRUE)
-  ),
-  
-  tabPanel("Preoperative PSA", 
+  tabPanel("Hierarchical Clustering", 
            
            sliderInput("psa", 
                        "Preoperative PSA Value", 
@@ -507,7 +516,29 @@ tab_datasets <- fluidRow(
                        max = 50, 
                        value = 4,
                        width = 500)
+  ),
+  
+  tabPanel("PC Analysis", 
+           
+           sliderInput("psa", 
+                       "Preoperative PSA Value", 
+                       min = 0,
+                       max = 50, 
+                       value = 4,
+                       width = 500)
+  ),
+  
+  
+  
+  tabPanel("ROC Analysis", 
+           radioButtons(inputId = "stage_control", label = "Control group",
+                        c('Stage I', 'Stage II','Stage III','Stage IV'),
+                        inline = TRUE),
+           radioButtons(inputId = "stage_case", label = "Case group",
+                        c('Stage I', 'Stage II','Stage III','Stage IV'),
+                        inline = TRUE)
   )
+  
   )
   
   )
@@ -572,23 +603,29 @@ server <- function(input, output, session) {
   
   output$mir.name <- renderUI({ 
     mir.id <- input$mir.id
-    mir.name <- mir.annotation[mir.id, 'mir_name']
+    mir.name <- mir.annotation[mir.id, 'Name']
     mir.url <- paste0('http://www.mirbase.org/cgi-bin/mature.pl?mature_acc=', mir.id)
     mir.url <- a(mir.name, href = mir.url, style = "font-size: 150%;")
-    mir.url
+    tagList(mir.url)
   })
   
+  output$mir.preid <- renderText({ 
+    mir.id <- input$mir.id
+    mir.preid <- mir.annotation[mir.id, 'Previous_ID']
+    mir.preid <- paste0('Previous IDs: ', mir.preid)
+    mir.preid
+  })
   
   output$mir.info <- renderText({ 
     mir.id <- input$mir.id
-    mir.name <- mir.annotation[mir.id, 'mir_name']
+    mir.name <- mir.annotation[mir.id, 'Name']
     mir.info <- paste0('Accession: ', mir.id)
     mir.info
   })
   
   output$mir.seq <- renderText({ 
     mir.id <- input$mir.id
-    mir.seq <- mir.annotation[mir.id, 'mir_seq']
+    mir.seq <- mir.annotation[mir.id, 'Sequence']
     mir.seq <- paste0('Sequence: ', mir.seq)
     mir.seq
   })
@@ -596,9 +633,9 @@ server <- function(input, output, session) {
   
   output$mir.targets <- renderUI({ 
     mir.id <- input$mir.id
-    mir.name <- mir.annotation[mir.id, 'mir_name']
+    mir.name <- mir.annotation[mir.id, 'Name']
     mir.encori <- paste0('http://starbase.sysu.edu.cn/agoClipRNA.php?source=mRNA&flag=miRNA&clade=mammal&genome=human&assembly=hg19&miRNA=',
-                         mir.id, '&clipNum=&deNum=&panNum=&proNum=&program=&target=')
+                         mir.name, '&clipNum=&deNum=&panNum=&proNum=&program=&target=')
     mir.encori <- a('ENCORI', href = mir.encori, style = "font-size: 100%;")
     
     mir.mirdb <- paste0('http://mirdb.org/cgi-bin/search.cgi?searchType=miRNA&full=mirbase&searchBox=',mir.id)
@@ -622,6 +659,12 @@ server <- function(input, output, session) {
                                          selection = list(mode='single', selected=1)
   )
   
+  output$browser_datasets <- DT::renderDataTable({datasets},
+                                         options = list(pageLength = 5),
+                                         selection = list(mode='single', selected=1)
+  )
+  
+
   output$dataset_summary <- renderText({ 
     idx <- input$datasets_rows_selected
     dataset_summary <- as.character(paste0(datasets[idx,'Accession'], ': ', datasets[idx,'Title']))
