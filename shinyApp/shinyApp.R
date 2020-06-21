@@ -14,11 +14,15 @@ library(survminer)
 library(limma)
 library(edgeR)
 library(DT)
+library(dplyr)
+library(pROC)
+library(ROCR)
+
 
 library(dashboardthemes)
 library(shinydashboardPlus)
 
-#source('shinyApp/shiny_functions.R')
+source('shinyApp/shiny_functions.R')
 
 ##### ui
 
@@ -264,7 +268,45 @@ mir.id <- selectizeInput(inputId = "mir.id", label=strong('miRNA'),# h4(strong('
                           ))
 
 
+
+
+
+project.default <- 'TCGA-CHOL' # hsa-let-7a-5p
+
+project.id <- selectizeInput(inputId = "project.id", label=NULL,# h4(strong('miRNA'))
+                         choices = NULL, selected = project.default, 
+                         multiple = FALSE, width = 150,
+                         options = list(placeholder = 'Select a project',
+                                        server = TRUE, selectOnTab=TRUE#,
+                                        #searchField = c('Name', 'ID', 'Previous_ID'),
+                                        #labelField = "Name",
+                                        #valueField = "ID",
+                                        #maxOptions = 5,
+                                        #render = I("{option: function(item, escape) 
+                                        #           {var gene = '<div>' + '<strong>' + escape(item.Name) + '</strong>' + '<ul>';
+                                        #           gene = gene + '<li>' + 'Previous IDs:' + item.Previous_ID + '</li>';
+                                        #           gene = gene + '<li>' + 'Accession: ' + item.ID + '</li>' + '</ul>' + '</div>';
+                                        #           return gene
+                                        #           }
+                                        #           }")
+                          ))
+
+
 datasets <- readRDS('shinyApp/data/CCMA_Datasets.RDS')
+
+eSet <- readRDS('shinyApp/data/GSE73002_GPL18941_eSet.RDS')
+expr <- exprs(eSet)
+meta <- pData(eSet)
+
+colnames(meta)[9] <- 'Sample.Type'
+
+meta.tcga <- readRDS('shinyApp/data/Metadata_TCGA.RDS')
+expr.tcga <- readRDS('shinyApp/data/miRNA_Expression_TCGA.RDS')
+
+projects.tcga <- meta.tcga %>% group_by(project_id) %>% 
+  summarise(group=length(unique(sample_type)))
+
+projects.tcga <- sort(projects.tcga[projects.tcga$group==2,]$project_id)
 
 
 tab_browser <- fluidRow(
@@ -279,25 +321,48 @@ tab_browser <- fluidRow(
     strong(textOutput("mir.preid")),
     strong(textOutput("mir.info")),
     strong(textOutput("mir.seq")),
-    strong(uiOutput("mir.targets"))
+    strong(uiOutput("mir.targets")),
+    
+    hr(),
+    
+    column(8,
+           br(),
+      plotOutput('tcga_boxplot',width = 800, height = 350)
+    ),
+    
+    column(4, 
+           project.id, 
+           plotOutput('tcga_rocplot',width = 400, height = 300)
+    )
     
     #strong("Targets: ", a("ENCORI", href = textOutput('mir.encori'), style = "font-size: 100%;"))
 
     ),
   
+  #box(
+  #  title = 'miRNA expression in TCGA', status = "primary", solidHeader = FALSE, collapsible = FALSE,
+  #  width = 12, 
+    
+  #  plotOutput('tcga_boxplot',width = 1000, height = 400)
+  #),
+  
+  
+  
   box(
     title = 'Select a dataset', status = "primary", solidHeader = TRUE, collapsible = FALSE,
     width = 12, 
     
-    DT::dataTableOutput("browser_datasets")
-  ),
-  
-  box(
-    title = 'miRNA expression in TCGA', status = "primary", solidHeader = TRUE, collapsible = FALSE,
-    width = 12#, 
-    
-    #DT::dataTableOutput("browser_datasets")
+    DT::dataTableOutput("browser_datasets"),
+    hr(),
+    plotOutput('mir_boxplot',width = 400, height = 400)
   )
+  
+  #box(title = NULL,
+  #    status = "primary", solidHeader = FALSE, collapsible = TRUE,
+  #    width = 4,
+  #    height = 400,
+  #    plotOutput('mir_boxplot')
+  #),
   
   
   )
@@ -324,7 +389,7 @@ tab_datasets <- fluidRow(
                     #),
                     
                     #box(title = 'Summary',  
-                    #     status = "info", solidHeader = TRUE, collapsible = TRUE,
+                    #     status = "primary", solidHeader = TRUE, collapsible = TRUE,
                     #     width = 12,
                     #     #height = 400,
                     #     textOutput("dataset_summary"),
@@ -346,7 +411,7 @@ tab_datasets <- fluidRow(
                     #conditionalPanel(condition = "input.datasets_rows_selected==1 || input.datasets_rows_selected==3 || input.datasets_rows_selected==6 || 
                     #                 input.datasets_rows_selected==8 || input.datasets_rows_selected==9",
                     #                 box(title = 'Sample Type',  
-                    #                     status = "info", solidHeader = TRUE, collapsible = TRUE,
+                    #                     status = "primary", solidHeader = TRUE, collapsible = TRUE,
                     #                     width = 4,
                     #                     height = 400,
                     #                     plotOutput('pie_sample_type')
@@ -354,7 +419,7 @@ tab_datasets <- fluidRow(
                     #),
                     
                     box(title = 'Sample Type',
-                        status = "info", solidHeader = TRUE, collapsible = TRUE,
+                        status = "primary", solidHeader = TRUE, collapsible = TRUE,
                         width = 4,
                         height = 400,
                         plotOutput('pie_sample_type')
@@ -362,7 +427,7 @@ tab_datasets <- fluidRow(
                     
                     conditionalPanel(condition = "input.datasets_rows_selected==1 || input.datasets_rows_selected==5 || input.datasets_rows_selected==12",
                                      box(title = 'Pathological T Stage', 
-                                         status = "info", solidHeader = TRUE, collapsible = TRUE,
+                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
                                          width = 4,
                                          height = 400,
                                          plotOutput('pie_pstage')
@@ -371,7 +436,7 @@ tab_datasets <- fluidRow(
                     
                     conditionalPanel(condition = "input.datasets_rows_selected==1 || input.datasets_rows_selected==2 || input.datasets_rows_selected==3",
                                      box(title = 'Clinical T Stage', 
-                                         status = "info", solidHeader = TRUE, collapsible = TRUE,
+                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
                                          width = 4,
                                          height = 400,
                                          plotOutput('pie_cstage')
@@ -380,7 +445,7 @@ tab_datasets <- fluidRow(
                     
                     conditionalPanel(condition = "input.datasets_rows_selected!=3 && input.datasets_rows_selected<10",
                                      box(title = 'Preoperative PSA', 
-                                         status = "info", solidHeader = TRUE, collapsible = TRUE,
+                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
                                          width = 4,
                                          height = 400,
                                          plotOutput('bar_psa')
@@ -390,7 +455,7 @@ tab_datasets <- fluidRow(
                     conditionalPanel(condition = "input.datasets_rows_selected<12 && input.datasets_rows_selected!=2 && input.datasets_rows_selected!=10 && 
                                      input.datasets_rows_selected!=11",
                                      box(title = 'Gleason Score', 
-                                         status = "info", solidHeader = TRUE, collapsible = TRUE,
+                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
                                          width = 4,
                                          height = 400,
                                          plotOutput('bar_gleason')
@@ -399,7 +464,7 @@ tab_datasets <- fluidRow(
                     
                     conditionalPanel(condition = "input.datasets_rows_selected==1",
                                      box(title = 'Overall Survival Status', 
-                                         status = "info", solidHeader = TRUE, collapsible = TRUE,
+                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
                                          width = 4,
                                          height = 400,
                                          plotOutput('pie_os_status')
@@ -408,7 +473,7 @@ tab_datasets <- fluidRow(
                     
                     conditionalPanel(condition = "input.datasets_rows_selected==1",
                                      box(title = 'Overall Survival', 
-                                         status = "info", solidHeader = TRUE, collapsible = TRUE,
+                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
                                          width = 4,
                                          height = 400,
                                          plotOutput('km_os_time')
@@ -417,7 +482,7 @@ tab_datasets <- fluidRow(
                     
                     conditionalPanel(condition = "input.datasets_rows_selected<=12",
                                      box(title = 'Relapse-free Survival Status', 
-                                         status = "info", solidHeader = TRUE, collapsible = TRUE,
+                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
                                          width = 4,
                                          height = 400,
                                          plotOutput('pie_bcr_status')
@@ -427,7 +492,7 @@ tab_datasets <- fluidRow(
                     
                     conditionalPanel(condition = "input.datasets_rows_selected<=10",
                                      box(title = 'Relapse-free Survival', 
-                                         status = "info", solidHeader = TRUE, collapsible = TRUE,
+                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
                                          width = 4,
                                          height = 400,
                                          plotOutput('km_bcr_time')
@@ -438,7 +503,7 @@ tab_datasets <- fluidRow(
                     conditionalPanel(condition = "input.datasets_rows_selected==10 || input.datasets_rows_selected==12 || input.datasets_rows_selected==13 || 
                                      input.datasets_rows_selected==14",
                                      box(title = 'Metastasis-free Survival Status', 
-                                         status = "info", solidHeader = TRUE, collapsible = TRUE,
+                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
                                          width = 4,
                                          height = 400,
                                          plotOutput('pie_metastasis_status')
@@ -447,7 +512,7 @@ tab_datasets <- fluidRow(
                     
                     conditionalPanel(condition = "input.datasets_rows_selected==10",
                                      box(title = 'Metastasis-free Survival', 
-                                         status = "info", solidHeader = TRUE, collapsible = TRUE,
+                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
                                          width = 4,
                                          height = 400,
                                          plotOutput('km_metastasis_time')
@@ -456,7 +521,7 @@ tab_datasets <- fluidRow(
                     
                     
                     #box(title = 'Preop PSA', 
-                    #     status = "info", solidHeader = TRUE, collapsible = TRUE,
+                    #     status = "primary", solidHeader = TRUE, collapsible = TRUE,
                     #     width = 4,
                     #     #height = 400,
                     #     plotOutput('pie_psa')
@@ -599,6 +664,7 @@ ui <- dashboardPage(title='CCMA', header, sidebar, body) # skin = 'blue',
 
 server <- function(input, output, session) { 
   updateSelectizeInput(session, 'mir.id', choices = mir.annotation, selected = mir.default, server = TRUE)
+  updateSelectizeInput(session, 'project.id', choices = projects.tcga, selected = project.default, server = TRUE)
   
   
   output$mir.name <- renderUI({ 
@@ -653,23 +719,97 @@ server <- function(input, output, session) {
     tagList("Targets:", mir.encori, mir.mirdb, mir.mirtarbase, mir.targetscan, mir.dianatarbase)
   })
   
+  output$tcga_boxplot <- renderPlot({
+    
+    mir.id <- input$mir.id
+    mir.name <- mir.annotation[mir.id, 'Name']
+    #gene.symbol <- gene.annotation$external_gene_name[which(gene.annotation$ensembl_id==gene.id)]
+    
+    #grp <- group.expression()
+    group <- meta.tcga[,'sample_type']
+    expr <- expr.tcga[mir.id,]
+    project <- meta.tcga[,'project_id']
+    
+    dataForBoxPlot <- data.frame(expr, group, project, mir.name)
+    
+    p <- tcgaboxplotFun(dataForBoxPlot)
+    p
+  })
+  
+  
+  output$tcga_rocplot <- renderPlot({
+    
+    mir.id <- input$mir.id
+    mir.name <- mir.annotation[mir.id, 'Name']
+    #gene.symbol <- gene.annotation$external_gene_name[which(gene.annotation$ensembl_id==gene.id)]
+    
+    #grp <- group.expression()
+    project.id <- input$project.id
+    idx <- meta.tcga$project_id==project.id
+    
+    group <- meta.tcga[idx,'sample_type']
+    expr <- expr.tcga[mir.id,idx]
+    
+    dataForROCPlot <- data.frame(expr, group)
+    dataForROCPlot$group <- factor(dataForROCPlot$group, levels = c('Normal','Tumor'))
+    
+    p <- rocplotFun(dataForROCPlot)
+    p
+  })
+  
+  
+  
+  
+  output$browser_datasets <- DT::renderDataTable({datasets},
+                                                 options = list(pageLength = 5),
+                                                 selection = list(mode='multiple', selected=1)
+  )
+  
+  
+  output$mir_boxplot <- renderPlot({
+    
+    mir.id <- input$mir.id
+    #gene.symbol <- gene.annotation$external_gene_name[which(gene.annotation$ensembl_id==gene.id)]
+    
+    #grp <- group.expression()
+    group <- meta[,'Sample.Type']
+    expr <- expr[mir.id,]
+    dataset <- 'GSE73002'
+    
+    dataForBoxPlot <- data.frame(expr, group, dataset)
+
+    p <- boxplotFun(dataForBoxPlot)
+    p
+  })
+  
   
   output$datasets <- DT::renderDataTable({datasets},
                                          options = list(pageLength = 5),
                                          selection = list(mode='single', selected=1)
   )
   
-  output$browser_datasets <- DT::renderDataTable({datasets},
-                                         options = list(pageLength = 5),
-                                         selection = list(mode='single', selected=1)
-  )
+  output$pie_sample_type <- renderPlot({
+    #idx <- input$dataset_rows_selected
+    #accession <- as.character(datasets[idx,'Accession'])
+    
+    sample.freq <- table(meta$Sample.Type)
+    dataForPiePlot <- data.frame(num=as.numeric(sample.freq), sam=names(sample.freq))
+    
+    p <- pieplotFun(dataForPiePlot)
+    
+    p
+  })
   
-
+  
   output$dataset_summary <- renderText({ 
     idx <- input$datasets_rows_selected
     dataset_summary <- as.character(paste0(datasets[idx,'Accession'], ': ', datasets[idx,'Title']))
     dataset_summary
   })
+  
+  
+  
+  
   
   
   output$download <- DT::renderDataTable({datasets},
