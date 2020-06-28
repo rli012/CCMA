@@ -113,8 +113,9 @@ mir22$Previous_ID[mir22$Previous_ID==''] <- NA
 saveRDS(mir22, file = 'data/miRBase/miRBase_10.0_22.RDS')
 
 
+###############################################################################################################
 
-######################################################################################3
+######################################################################################
 ### 3D-Gene Human miRNA V21_1.0.0
 
 # GSE122497
@@ -284,41 +285,48 @@ saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
 
 
 
-
-
-
-
 ######################################################################################3
-### 3D-Gene Human miRNA V20_1.0.0
+### 3D-Gene Human miRNA V20_1.0.0; 3D-Gene Human miRNA V21_1.0.0
 
-# GSE73002
-# GSE59856
-# GSE85679/GSE85680
+# GSE124158
+# GSE134108
 
+gse <- 'GSE124158'
 
-gse <- 'GSE73002'
-
-seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = F, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = FALSE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
 
 length(seriesMatrix)
 
-seriesMatrix <- seriesMatrix[[1]]
+seriesMatrix <- seriesMatrix[[2]] # 2
 seriesMatrix
 
 ### Phenotype
 phenoData <- pData(seriesMatrix)
 phenoData <- getPhenoFun(phenoData)
-#View(phenoData)
+
+View(phenoData)
+
 phenoData$Data.Processing[1]
 phenoData$Source
 
-### Annotation
-annoData <- seriesMatrix@featureData@data
-dim(annoData)
 
-View(annoData)
+# GSE124158
+colnames(phenoData)[9:13] <- c('Age','Sex','Disease.Status','Tissue','Clinical.Stage') 
+table(phenoData$Disease.Status)
 
-#annoData$Name <- sapply(annoData$ID, function(x) mirIDNameConversionFun(x)[[1]][1])
+phenoData$Disease.Status[phenoData$Disease.Status=='HCC'] <- 'Hepatocellular Carcinoma'
+
+# GSE134108
+phenoData$Disease.Status <- 'Breast Cancer'
+
+colnames(phenoData)[9:15] <- c('Age','ER.PS','HER2.IHC','KI67','Metastasis.Status','PGR.PS','Tissue') 
+table(phenoData$Disease.Status)
+
+phenoData$Metastasis.Status[phenoData$Metastasis.Status=='no-Metastasis'] <- 'No Metastasis'
+
+phenoData$Group <- paste0(phenoData$Disease.Status, ', ', phenoData$Metastasis.Status)
+table(phenoData$Group)
+
 
 platform <- seriesMatrix@annotation
 platform
@@ -333,16 +341,18 @@ exprData[1:5,1:5]
 min(exprData, na.rm = T)
 max(exprData, na.rm = T)
 
-
-rownames(phenoData) == colnames(exprData)
-
-rownames(annoData) == rownames(exprData)
+### Annotation
+#annoData <- seriesMatrix@featureData@data
+#dim(annoData)
 
 #View(annoData)
 
-#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
+#annoData$Name <- sapply(annoData$ID, function(x) mirIDNameConversionFun(x)[[1]][1])
 
-#View(exprData)
+#rownames(annoData) == rownames(exprData)
+
+rownames(phenoData) == colnames(exprData)
+
 
 saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
 
@@ -358,14 +368,15 @@ saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
 
 
 ######################################################################################3
-### 3D-Gene Human miRNA V20_1.0.0; 3D-Gene Human miRNA V21_1.0.0
+### 3D-Gene Human miRNA V20_1.0.0
 
-# GSE124158
-# GSE134108
+# GSE73002
+# GSE59856
+# GSE85679/GSE85680
 
-gse <- 'GSE134108'
+gse <- 'GSE85679'
 
-seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = FALSE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = F, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
 
 length(seriesMatrix)
 
@@ -375,17 +386,45 @@ seriesMatrix
 ### Phenotype
 phenoData <- pData(seriesMatrix)
 phenoData <- getPhenoFun(phenoData)
-#View(phenoData)
+
+View(phenoData)
+
 phenoData$Data.Processing[1]
 phenoData$Source
 
-### Annotation
-annoData <- seriesMatrix@featureData@data
-dim(annoData)
 
-View(annoData)
+# GSE73002
+colnames(phenoData)[9:10] <- c('Disease.Status','Tissue') 
+table(phenoData$Disease.Status)
 
-#annoData$Name <- sapply(annoData$ID, function(x) mirIDNameConversionFun(x)[[1]][1])
+phenoData$Disease.Status[phenoData$Disease.Status=='benign breast disease'] <- 'Benign Breast Disease'
+phenoData$Disease.Status[phenoData$Disease.Status=='breast cancer'] <- 'Breast Cancer'
+phenoData$Disease.Status[phenoData$Disease.Status=='non-cancer'] <- 'Healthy'
+phenoData$Disease.Status[phenoData$Disease.Status=='prostate disease'] <- 'Prostate Disease'
+
+
+# GSE59856
+colnames(phenoData)[9:14] <- c('Age','Disease.Status','Sex','Operability','Tissue','Tumor.Stage') 
+table(phenoData$Disease.Status)
+
+phenoData$Disease.Status[phenoData$Disease.Status=='benign pancreatic or biliary tract diseases'] <- 'Benign Pancreatic or Biliary Tract Diseases'
+phenoData$Disease.Status[phenoData$Disease.Status=='biliary tract cancer'] <- 'Biliary Tract Cancer'
+phenoData$Disease.Status[phenoData$Disease.Status=='colon cancer'] <- 'Colon Cancer'
+phenoData$Disease.Status[phenoData$Disease.Status=='esophagus cancer'] <- 'Esophagus Cancer'
+
+phenoData$Disease.Status[phenoData$Disease.Status=='healthy control'] <- 'Healthy'
+phenoData$Disease.Status[phenoData$Disease.Status=='liver cancer'] <- 'Liver Cancer'
+phenoData$Disease.Status[phenoData$Disease.Status=='pancreatic cancer'] <- 'Pancreatic Cancer'
+phenoData$Disease.Status[phenoData$Disease.Status=='stomach cancer'] <- 'Stomach Cancer'
+
+
+# GSE85679/GSE85680
+colnames(phenoData)[9:13] <- c('Disease.Status','Individual','Order.In.Which.Blood.Was.Collected.During.Treatment','Sample','Treatment') 
+table(phenoData$Disease.Status)
+
+colnames(phenoData)
+phenoData$Disease.Status <- 'Hepatocellular Carcinoma'
+phenoData$Treatment
 
 platform <- seriesMatrix@annotation
 platform
@@ -401,17 +440,17 @@ min(exprData, na.rm = T)
 max(exprData, na.rm = T)
 
 
-rownames(phenoData) == colnames(exprData)
-
-rownames(annoData) == rownames(exprData)
+### Annotation
+#annoData <- seriesMatrix@featureData@data
+#dim(annoData)
 
 #View(annoData)
 
-#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
+#annoData$Name <- sapply(annoData$ID, function(x) mirIDNameConversionFun(x)[[1]][1])
 
-#View(exprData)
+#rownames(annoData) == rownames(exprData)
 
-saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
 
 
 ### eSet
@@ -424,7 +463,9 @@ saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
 
 
 
-######################################################################################3
+##############################################################################################################
+
+######################################################################################
 ### Agilent-031181 Unrestricted_Human_miRNA_V16.0_Microarray (miRBase release 16.0 miRNA ID version)
 
 # GSE68951
@@ -434,7 +475,7 @@ saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
 # GSE79943
 # GSE54156
 
-gse <- 'GSE42654'
+gse <- 'GSE54156'
 
 seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
 
@@ -452,15 +493,86 @@ View(phenoData)
 phenoData$Data.Processing[1]
 phenoData$Source
 
-### Annotation
-#annoData <- seriesMatrix@featureData@data
+# GSE68951
+colnames(phenoData)[9:12] <- c('Disease.Status','Patient.ID','Time.Point','Tissue') 
+table(phenoData$Disease.Status)
 
-#View(annoData)
+phenoData$Disease.Status[phenoData$Disease.Status=='lung cancer'] <- 'Lung Cancer'
+phenoData$Disease.Status[phenoData$Disease.Status=='non-cancerous lung disease (control)'] <- 'Non-Cancerous Lung Disease'
 
-#annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = 16)[[1]][1])
-#annoData$Name
+# GSE48137
+colnames(phenoData)[9:11] <- c('Individual','Tissue','Treatment') 
+table(phenoData$Disease.Status)
 
-#saveRDS(annoData, file='data/Annotation/Agilent_031181_Unrestricted_Human_miRNA_V16.0_Microarray.RDS')
+phenoData$Disease.Status <- phenoData$Group <- phenoData$Source
+
+phenoData$Disease.Status[phenoData$Disease.Status=='serum-control'] <- 'Healthy'
+phenoData$Disease.Status[phenoData$Disease.Status=='serum-Wilms-preCT'] <- 'Wilms Tumor'
+phenoData$Disease.Status[phenoData$Disease.Status=='serum-wilms-postCT'] <- 'Wilms Tumor'
+
+phenoData$Group[phenoData$Group=='serum-control'] <- 'Healthy'
+phenoData$Group[phenoData$Group=='serum-Wilms-preCT'] <- 'Wilms Tumor, PreCT'
+phenoData$Group[phenoData$Group=='serum-wilms-postCT'] <- 'Wilms Tumor, ProCT'
+
+table(phenoData$Group)
+
+colnames(phenoData)
+
+# GSE59993
+colnames(phenoData)[9:15] <- c('Age','Drawing.Year','Hemolysis.Score','Hemolysis.Score.Class','Plasmaid',
+                               'Time.From.Surgery','Tissue') 
+table(phenoData$Disease.Status)
+
+phenoData$Disease.Status <- 'Breast Cancer'
+
+table(phenoData$Hemolysis.Score.Class)
+
+phenoData$Hemolysis.Score.Class <- ifelse(phenoData$Hemolysis.Score.Class=='hemolyzed','Hemolyzed','No Hemolysis')
+
+phenoData$Group <- paste0(phenoData$Disease.Status, ', ', phenoData$Hemolysis.Score.Class)
+table(phenoData$Group)
+
+
+# GSE68373
+colnames(phenoData)[9:17] <- c('Age','Drawing.Year','ER.Class','Hemolysis.Score','Hemolysis.Score.Class',
+                               'Metastasis.Class','Plasmaid','Time.From.Surgery','Tissue') 
+table(phenoData$Disease.Status)
+
+phenoData$Disease.Status <- 'Breast Cancer'
+
+table(phenoData$Hemolysis.Score.Class)
+
+phenoData$Hemolysis.Score.Class <- ifelse(phenoData$Hemolysis.Score.Class=='hemolyzed','Hemolyzed','No Hemolysis')
+phenoData$Metastasis.Class <- ifelse(phenoData$Metastasis.Class=='metastasis','Metastasis','No Metastasis')
+
+phenoData$Group <- NA
+idx <- which(!is.na(phenoData$Hemolysis.Score.Class))
+phenoData$Group[idx] <- paste0(phenoData$Disease.Status[idx], ', ', phenoData$Hemolysis.Score.Class[idx])
+
+idx <- which(!is.na(phenoData$Metastasis.Class))
+phenoData$Group[idx] <- paste0(phenoData$Disease.Status[idx], ', ', phenoData$Metastasis.Class[idx])
+
+# GSE79943
+colnames(phenoData)[9:14] <- c('Age','Time.Point','Disease.Status','Histology','Tumor.Stage','Tissue') 
+table(phenoData$Disease.Status)
+
+phenoData$Disease.Status[phenoData$Disease.Status=='	Ovarian cancer'] <- '	Ovarian Cancer'
+phenoData$Disease.Status[phenoData$Disease.Status=='Paraovarian cyst'] <- 'Paraovarian Cyst'
+
+phenoData$Time.Point <- ifelse(phenoData$Time.Point=='preoperative', 'Preoperative', 'Postoperative')
+
+phenoData$Group <- paste0(phenoData$Disease.Status, ', ', phenoData$Time.Point)
+
+# GSE54156
+colnames(phenoData)[9:12] <- c('Age','Disease.Status','Sex','Tissue') 
+table(phenoData$Disease.Status)
+
+phenoData$Disease.Status[phenoData$Disease.Status=='MM'] <- 'Multiple Myeloma'
+phenoData$Disease.Status[phenoData$Disease.Status=='healthy control'] <- 'Healthy'
+
+phenoData$Group <- phenoData$Disease.Status
+phenoData$Group
+
 
 platform <- seriesMatrix@annotation
 platform
@@ -475,7 +587,18 @@ exprData[1:5,1:5]
 min(exprData)
 max(exprData)
 
-View(exprData)
+
+### Annotation
+annoData <- seriesMatrix@featureData@data
+
+View(annoData)
+
+annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = 16)[[1]][1])
+annoData$Name
+sum(annoData$Name=='NA')
+
+#saveRDS(annoData, file='data/Annotation/Agilent_031181_Unrestricted_Human_miRNA_V16.0_Microarray.RDS')
+
 
 idx <- grep('hsa', rownames(exprData))
 idx
@@ -489,13 +612,125 @@ sum(rownames(annoData) == rownames(exprData))
 dim(exprData)
 
 rownames(exprData) <- annoData$Name
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
+
+
+
+
+##############################################################################################################
+
+######################################################################################
+### Agilent-031181 Unrestricted_Human_miRNA_V16.0_Microarray (miRNA_107_Sep09)
+
+# GSE100508
+
+
+gse <- 'GSE100508'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+
+seriesMatrix <- seriesMatrix[[1]]
+
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+View(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+colnames(phenoData)
+
+# GSE100508
+colnames(phenoData)[9:15] <- c('Age','Sex','Melanoma.At.Sampling.Date','Clinical.Stage','Plasma.Input.ml','Primary.Melanoma.Thickness.mm','Tissue') 
+table(phenoData$Disease.Status)
+
+table(phenoData$Source)
+
+phenoData$Disease.Status <- phenoData$Title
+
+phenoData$Disease.Status[grep('healthy',phenoData$Disease.Status)] <- 'Healthy'
+phenoData$Disease.Status[grep('tumor|risk|pre|post',phenoData$Disease.Status)] <- 'Melanoma'
+phenoData$Disease.Status[grep('Kaposi',phenoData$Disease.Status)] <- 'HIV-associated Kaposi'
+phenoData$Disease.Status[grep('MS',phenoData$Disease.Status)] <- 'Multiple Sclerosis'
+phenoData$Disease.Status[grep('sEV',phenoData$Disease.Status)] <- 'Cell Line'
+
+
+
+phenoData$Group <- phenoData$Source
+
+phenoData$Group[grep('healthy',phenoData$Group)] <- 'Healthy'
+phenoData$Group[grep('melanoma bearer',phenoData$Group)] <- 'Melanoma Bearer'
+phenoData$Group[grep('melanoma survivor with low relapse risk',phenoData$Group)] <- 'Melanoma Survivor, Low Relapse Risk'
+phenoData$Group[grep('melanoma survivor with high relapse risk',phenoData$Group)] <- 'Melanoma Survivor, High Relapse Risk'
+phenoData$Group[grep('after',phenoData$Group)] <- 'Melanoma Survivor, After Resection'
+phenoData$Group[grep('Kaposi',phenoData$Group)] <- 'HIV-associated Kaposi'
+phenoData$Group[grep('Sclerosis',phenoData$Group)] <- 'Multiple Sclerosis'
+phenoData$Group[grep('sEV',phenoData$Group)] <- c('Immature Monocyte-dervied Dendritic Cells','Liver Cell Line Huh7',
+                                                  'Liver Cell Line Lx-2','SK-Hep1','Mature Monocyte-dervied Dendritic Cells',
+                                                  'Monocyte-derived Macrophages')
+
+
+table(phenoData$Group)
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Expression
+# from series matrix
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
+min(exprData)
+max(exprData)
+
+
+### Annotation
+annoData <- seriesMatrix@featureData@data
+
+View(annoData)
+
+annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = 18)[[1]][1])
+annoData$Name
+sum(annoData$Name=='NA')
+
+filter <- which(annoData$Name=='NA')
+annoData <- annoData[-filter,]
+
+
+#saveRDS(annoData, file='data/Annotation/Agilent_031181_Unrestricted_Human_miRNA_V16.0_Microarray.RDS')
 View(exprData)
 
-#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
+idx <- grep('hsa', rownames(exprData))
+idx
 
-#View(exprData)
+exprData <- exprData[rownames(annoData),]
 
-saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+rownames(phenoData) == colnames(exprData)
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData$Name
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
 
 
 ### eSet
