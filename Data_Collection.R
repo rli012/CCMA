@@ -5,6 +5,7 @@ library(Biobase)
 library(GEOquery)
 library(readxl)
 library(stringr)
+library(plyr)
 
 getPhenoFun <- function(phenoData) {
   
@@ -951,7 +952,7 @@ saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
 # GSE55139
 
 
-gse <- 'GSE39833'
+gse <- 'GSE55139'
 
 seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
 
@@ -977,9 +978,26 @@ colnames(phenoData)
 phenoData$Disease.Status <- ifelse(grepl('Healthy Control', phenoData$Source), 'Healthy','Colorectal Cancer')
 phenoData$Group <- ifelse(grepl('Healthy Control', phenoData$Source), 'Healthy',paste0('Colorectal Cancer, TNM Stage ', phenoData$Tumor.Stage))
 
+
 unique(phenoData$Group)
 
+# GSE40246/GSE40247
+colnames(phenoData)[9:15] <- c('Age','Biological.Source.of.Exosomes','Disease.Status','Sex','Microrna.Source','Time','Tumor.Stage')
+phenoData$Age <- as.numeric(gsub('y', '', phenoData$Age))
 
+phenoData$Disease.Status <- 'Colorectal Cancer'
+phenoData$Group <- paste0('Colorectal Cancer, TNM Stage ', phenoData$Tumor.Stage)
+
+
+#GSE55139
+
+phenoData <- phenoData[,-c(9:10,13)]
+
+colnames(phenoData)[9:12] <- c('Age','N','Stage','T')
+
+phenoData$Disease.Status <- 'Colorectal Cancer'
+phenoData$Group <- ifelse(grepl('Pre-operative', phenoData$Title), paste0('Colorectal Cancer, Pre-operative'),
+                          paste0('Colorectal Cancer, Post-operative'))
 
 
 platform <- seriesMatrix@annotation
@@ -1000,10 +1018,16 @@ exprData <- data.frame(exprData,stringsAsFactors = F)
 ### Annotation
 annoData <- seriesMatrix@featureData@data
 
+#idx <- which(annoData$miRNA_ID=='hsa-miR-720')
+#idx
+
+
+#View(exprData[idx,])
+
 idx <- grep('hsa', annoData$miRNA_ID)
 annoData <- annoData[idx,]
 
-annoData$Name <- sapply(annoData$ACCESSION_STRING, function(x) strsplit(x, '|', fixed = T)[[1]][4])
+annoData$Name <- as.character(sapply(annoData$ACCESSION_STRING, function(x) strsplit(x, '|', fixed = T)[[1]][4]))
 annoData$Name
 
 saveRDS(annoData, file='data/Annotation/Agilent-021827_Human_miRNA_Microarray_G4470C_Feature_Number_version.RDS')
@@ -1011,15 +1035,45 @@ saveRDS(annoData, file='data/Annotation/Agilent-021827_Human_miRNA_Microarray_G4
 exprData <- exprData[rownames(annoData),]
 dim(exprData)
 
+exprData$ID_REF <- annoData$Name
+exprData$ID_REF
+
+
+### select most informative probe, MAX IQR
+iqr <- apply(exprData[,-ncol(exprData)], 1, function(v) IQR(v, na.rm = T))
+iqr
+
+exprData$IQR <- iqr
+
+probeIndex <- ddply(exprData, .(ID_REF), summarise, probe=which.max(IQR))
+probeIndex[1:5,]
+
+probes <- c()
+for (i in 1:nrow(probeIndex)) {
+  probe <- rownames(exprData)[which(exprData$ID_REF==probeIndex$ID_REF[i])]
+  print (probe)
+  
+  probes <- c(probes, probe[probeIndex$probe[i]])
+}
+
+filter <- which(is.na(probes))
+filter
+
+#probes <- probes[-filter]
+#probes
+
+exprData <- exprData[probes,]
+exprData
+
+rownames(exprData) <- exprData$ID_REF
+
+exprData <- exprData[,-c(ncol(exprData)-1,ncol(exprData))]
+
 rownames(phenoData) == colnames(exprData)
 exprData <- exprData[,rownames(phenoData)]
 
 rownames(annoData) == rownames(exprData)
 sum(rownames(annoData) == rownames(exprData))
-
-
-exprData$ID <- annoData$Name
-
 
 saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
 
@@ -1031,6 +1085,157 @@ eSet <- ExpressionSet(assayData = as.matrix(exprData),
                       annotation = platform)
 
 saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
+
+
+######################################################################################
+### Agilent-029297 Human miRNA Microarray (Feature Number version)
+
+# GSE34052
+# GSE48485
+
+gse <- 'GSE34052'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+
+seriesMatrix <- seriesMatrix[[1]]
+
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+
+# GSE39833/GSE40247
+colnames(phenoData)[9:14] <- c('Age','Fraction','Gender','Presence.of.Data.After.Operation.1.Present.0.Not.Tested','Tissue','Tumor.Stage')
+phenoData$Age <- as.numeric(gsub('y', '', phenoData$Age))
+
+colnames(phenoData)
+
+phenoData$Disease.Status <- ifelse(grepl('Healthy Control', phenoData$Source), 'Healthy','Colorectal Cancer')
+phenoData$Group <- ifelse(grepl('Healthy Control', phenoData$Source), 'Healthy',paste0('Colorectal Cancer, TNM Stage ', phenoData$Tumor.Stage))
+
+
+unique(phenoData$Group)
+
+# GSE40246/GSE40247
+colnames(phenoData)[9:15] <- c('Age','Biological.Source.of.Exosomes','Disease.Status','Sex','Microrna.Source','Time','Tumor.Stage')
+phenoData$Age <- as.numeric(gsub('y', '', phenoData$Age))
+
+phenoData$Disease.Status <- 'Colorectal Cancer'
+phenoData$Group <- paste0('Colorectal Cancer, TNM Stage ', phenoData$Tumor.Stage)
+
+
+#GSE55139
+
+phenoData <- phenoData[,-c(9:10,13)]
+
+colnames(phenoData)[9:12] <- c('Age','N','Stage','T')
+
+phenoData$Disease.Status <- 'Colorectal Cancer'
+phenoData$Group <- ifelse(grepl('Pre-operative', phenoData$Title), paste0('Colorectal Cancer, Pre-operative'),
+                          paste0('Colorectal Cancer, Post-operative'))
+
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Expression
+# from series matrix
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
+
+exprData <- data.frame(exprData,stringsAsFactors = F)
+
+
+
+### Annotation
+annoData <- seriesMatrix@featureData@data
+
+#idx <- which(annoData$miRNA_ID=='hsa-miR-720')
+#idx
+
+
+#View(exprData[idx,])
+
+idx <- grep('hsa', annoData$miRNA_ID)
+annoData <- annoData[idx,]
+
+annoData$Name <- as.character(sapply(annoData$ACCESSION_STRING, function(x) strsplit(x, '|', fixed = T)[[1]][4]))
+annoData$Name
+
+saveRDS(annoData, file='data/Annotation/Agilent-021827_Human_miRNA_Microarray_G4470C_Feature_Number_version.RDS')
+
+exprData <- exprData[rownames(annoData),]
+dim(exprData)
+
+exprData$ID_REF <- annoData$Name
+exprData$ID_REF
+
+
+### select most informative probe, MAX IQR
+iqr <- apply(exprData[,-ncol(exprData)], 1, function(v) IQR(v, na.rm = T))
+iqr
+
+exprData$IQR <- iqr
+
+probeIndex <- ddply(exprData, .(ID_REF), summarise, probe=which.max(IQR))
+probeIndex[1:5,]
+
+probes <- c()
+for (i in 1:nrow(probeIndex)) {
+  probe <- rownames(exprData)[which(exprData$ID_REF==probeIndex$ID_REF[i])]
+  print (probe)
+  
+  probes <- c(probes, probe[probeIndex$probe[i]])
+}
+
+filter <- which(is.na(probes))
+filter
+
+#probes <- probes[-filter]
+#probes
+
+exprData <- exprData[probes,]
+exprData
+
+rownames(exprData) <- exprData$ID_REF
+
+exprData <- exprData[,-c(ncol(exprData)-1,ncol(exprData))]
+
+rownames(phenoData) == colnames(exprData)
+exprData <- exprData[,rownames(phenoData)]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
+
+
+
+
+
+
+
+
+
+
 
 
 ######################################################################################
@@ -1671,14 +1876,27 @@ colnames(phenoData)[9] <- c('Sample.Type')
 
 table(phenoData$Sample.Type)
 
+phenoData$Disease.Status <- NA
+
+phenoData$Disease.Status[grepl('CONTROL', phenoData$Title) & grepl('normal', phenoData$Sample.Type)] <- 'Healthy'
+phenoData$Disease.Status[grepl('SE', phenoData$Title)] <- 'Seminomas'
+phenoData$Disease.Status[grepl('NS', phenoData$Title)] <- 'Non-seminomas'
+phenoData$Disease.Status[is.na(phenoData$Disease.Status)] <- 'Non-Germ Cell Tumor'
 
 
-### Annotation
-annoData <- readRDS(file='data/Annotation/Applied_Biosystems_TaqMan_Array_Human_MicroRNA_A_B_Cards_Set_v3.0.RDS')
-annoData
+phenoData$Group <- phenoData$Disease.Status
 
-rownames(annoData) <- paste0(annoData$Assay.Name, '-', annoData$Assay.ID, '_', annoData$Panel)
+phenoData$Group[phenoData$Sample.Type=='serum from patient with epidermoid cyst'] <- 'Non-Germ Cell Tumor, Epidermoid Cyst'
+phenoData$Group[phenoData$Sample.Type=='serum from patient with epidermis cyst'] <- 'Non-Germ Cell Tumor, Epidermis Cyst'
+phenoData$Group[phenoData$Sample.Type=='serum from patient with low grade liposarcoma'] <- 'Non-Germ Cell Tumor, Low Grade Liposarcoma'
+phenoData$Group[phenoData$Sample.Type=='serum from patient with neuro endocrine tumor'] <- 'Non-Germ Cell Tumor, Neuro Endocrine Tumor'
+phenoData$Group[phenoData$Sample.Type=='serum from patient with paratesticular hemorrhage'] <- 'Non-Germ Cell Tumor, Paratesticular Hemorrhage'
 
+phenoData$Group[phenoData$Sample.Type=='serum from patient with yolk sac tumor'] <- 'Non-seminomas, Yolk Sac Tumor'
+phenoData$Group[phenoData$Sample.Type=='serum from patient with teratoma'] <- 'Non-seminomas, Teratoma'
+phenoData$Group[phenoData$Sample.Type=='serum from patient with embryonal carcinoma'] <- 'Non-seminomas, Embryonal Carcinoma'
+phenoData$Group[phenoData$Sample.Type=='serum from patient with embryonal carcinoma + yolk sac tumor'] <- 'Non-seminomas, Embryonal Carcinoma and Yolk Sac Tumor'
+phenoData$Group[phenoData$Sample.Type=='serum from patient with embryonal carcinoma + teratoma'] <- 'Non-seminomas, Embryonal Carcinoma, Teratoma'
 
 platform <- seriesMatrix@annotation
 platform
@@ -1687,30 +1905,22 @@ saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Infor
 
 
 ### Expression
-
 exprData <- exprs(seriesMatrix)
-
 exprData[1:5,1:5]
-min(exprData)
-max(exprData)
 
-View(exprData)
-dim(exprData)
+### Annotation
+annoData <- readRDS(file='data/Annotation/Applied_Biosystems_TaqMan_Array_Human_MicroRNA_A_B_Cards_Set_v3.0.RDS')
+annoData
 
-idx <- which(!rownames(annoData) %in% rownames(exprData))
-idx
-annoData[idx,]
+rownames(annoData) <- paste0(annoData$Assay.Name, '-', annoData$Assay.ID, '_', annoData$Panel)
 
 filter <- which(!rownames(exprData) %in% rownames(annoData))
 filter
 
 exprData[filter,]
 
-exprData <- exprData[-filter,]
-
 idx <- intersect(rownames(annoData), rownames(exprData))
 idx
-dim(exprData)
 
 exprData <- exprData[idx,]
 
@@ -1719,16 +1929,10 @@ sum(rownames(annoData) == rownames(exprData))
 dim(exprData)
 
 rownames(exprData) <- annoData[idx,]$Name
-View(exprData)
 
 rownames(phenoData) == colnames(exprData)
-#exprData <- exprData[,rownames(phenoData)]
 
 colnames(exprData) <- rownames(phenoData)
-
-#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
-
-#View(exprData)
 
 saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
 
@@ -1803,51 +2007,33 @@ platform
 saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
 
 
-### Expression
-# from series matrix
+### Annottion
 
 annoData <- readRDS(file='data/Annotation/Applied_Biosystems_TaqMan_Array_Human_MicroRNA_A_B_Cards_Set_v3.0.RDS')
 
+idx <- grep('hsa', annoData$ID)
+annoData <- annoData[idx,]
+
+
+### Expression
+
+### GSE47125
 system('wget https://ftp.ncbi.nlm.nih.gov/geo/series/GSE47nnn/GSE47125/suppl/GSE47125.xls.gz -P data/fromGEO/')
 system('gunzip data/fromGEO/GSE47125.xls.gz')
 
+exprData <- read_excel('data/fromGEO/GSE47125.xls')
+
+
+### GSE65708
 system('wget https://ftp.ncbi.nlm.nih.gov/geo/series/GSE65nnn/GSE65708/suppl/GSE65708_Matrix_normalized_by_MCR.txt.gz -P data/fromGEO/')
 system('gunzip data/fromGEO/GSE65708_Matrix_normalized_by_MCR.txt.gz')
 
-### GSE47125
-exprData <- read_excel('data/fromGEO/GSE47125.xls')
-
-### GSE65708
 exprData <- read.delim('data/fromGEO/GSE65708_Matrix_normalized_by_MCR.txt', header = T, sep = '\t', stringsAsFactors = F)
+
 
 ### GSE50013
 exprData <- exprs(seriesMatrix)
-
-# GSE64591
-
-
-
-exprData[1:5,1:5]
-min(exprData)
-max(exprData)
-
-View(exprData)
 dim(exprData)
-
-exprData <- data.frame(exprData, stringsAsFactors = F)
-
-rownames(exprData) <- exprData$ID_REF
-exprData <- exprData[,-1]
-
-idx <- which(!rownames(annoData) %in% rownames(exprData))
-idx
-
-filter <- which(!rownames(exprData) %in% rownames(annoData))
-filter
-
-exprData[filter,]
-
-exprData <- exprData[-filter,]
 
 idx <- intersect(rownames(annoData), rownames(exprData))
 idx
@@ -1860,10 +2046,45 @@ sum(rownames(annoData) == rownames(exprData))
 dim(exprData)
 
 rownames(exprData) <- annoData[idx,]$Name
-View(exprData)
+
+
+# GSE64591
+
+system('wget https://ftp.ncbi.nlm.nih.gov/geo/series/GSE64nnn/GSE64591/suppl/GSE64591_normalized.txt.gz -P data/fromGEO/')
+system('gunzip data/fromGEO/GSE64591_normalized.txt.gz')
+
+exprData <- read.delim('data/fromGEO/GSE64591_normalized.txt', sep = '\t', header = T, 
+                       skip = 7, stringsAsFactors = F)
+
+exprData <- data.frame(exprData, stringsAsFactors = F)
+filter <- which(duplicated(exprData$ID_REF))
+exprData <- exprData[-filter,]
+
+rownames(exprData) <- exprData$ID_REF
+exprData <- exprData[,-1]
+
+rownames(annoData) <- annoData$ID.2
+
+###
+filter <- which(!rownames(exprData) %in% rownames(annoData))
+filter
+
+rownames(exprData)[filter]
+
+idx <- intersect(rownames(annoData), rownames(exprData))
+idx
+dim(exprData)
+
+exprData <- exprData[idx,]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData[idx,]$Name
 
 rownames(phenoData) == colnames(exprData)
-#exprData <- exprData[,rownames(phenoData)]
+gsub(' ', '.', phenoData$Title) == colnames(exprData)
 
 colnames(exprData) <- rownames(phenoData)
 
@@ -1879,6 +2100,97 @@ eSet <- ExpressionSet(assayData = as.matrix(exprData),
 saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
 
 
+
+
+#################################################################################
+### Applied Biosystems Taqman Low Density Array Human microRNA Card A, Applied Biosystems Taqman Low Density Array Human microRNA Card B
+
+# GSE46355
+
+# GSE46355-GPL17039, Applied Biosystems Taqman Low Density Array Human microRNA Card A
+# GSE46355-GPL17040, Applied Biosystems Taqman Low Density Array Human microRNA Card B
+
+gse <- 'GSE46355'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+seriesMatrix
+
+# GSE46355-GPL17039
+seriesMatrix <- seriesMatrix[[1]]
+seriesMatrix
+
+# GSE46355-GPL17040
+seriesMatrix <- seriesMatrix[[2]]
+seriesMatrix
+
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+# GSE46355-GPL17039, GSE46355-GPL17040
+colnames(phenoData)
+colnames(phenoData)[9:19] <- c('Age', 'Associated.DCIS', 'Sex', 'Grade', 'Histolgical.Tumour.Type','Invasive.Tumor.Size',
+                               'Lymph.Node.Status','Lymphovascular.Invasion','Perineural.Invasion','Tumor.Stage','Whole.Tumor.Size')
+unique(phenoData$Group)
+
+phenoData$Disease.Status <- ifelse(phenoData$Source=='Control Healthy', 'Healthy', 'Breast Cancer')
+phenoData$Group <- ifelse(phenoData$Source=='Control Healthy', 'Healthy', 'Luminal A Breast Cancer')
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Annotation
+annoData <- readRDS(file='data/Annotation/Applied_Biosystems_TaqMan_Array_Human_MicroRNA_A_B_Cards_Set_v3.0.RDS')
+annoData
+
+idx <- grep('hsa', annoData$ID)
+annoData <- annoData[idx,]
+
+
+### Expression
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
+
+filter <- which(!rownames(exprData) %in% rownames(annoData))
+filter
+
+exprData[filter,]
+
+idx <- intersect(rownames(annoData), rownames(exprData))
+idx
+dim(exprData)
+
+exprData <- exprData[idx,]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData[idx,]$Name
+
+rownames(phenoData) == colnames(exprData)
+colnames(exprData) <- rownames(phenoData)
+
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
 
 
 #========================================================================================================================================
@@ -2739,34 +3051,1331 @@ eSet <- ExpressionSet(assayData = as.matrix(exprData),
 saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
 
 
+######################################################################################
+### Exiqon miRCURY LNA Universal RT microRNA PCR Human Panel I
+
+# GSE102166
+
+gse <- 'GSE102166'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+
+seriesMatrix <- seriesMatrix[[1]]
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+# GSE40738
+colnames(phenoData)
+table(phenoData$Disease.Status)
+
+colnames(phenoData)[9:13] <- c('Age', 'Metastatic.Stage', 'Progression.Free.Survival', 'Response', 'Sex')
+
+phenoData$Disease.Status <- 'Melanoma'
+
+phenoData$Group <- ifelse(grepl('during', phenoData$Source), paste0('Metastatic Melanoma, During MAPKi Treatment, ', phenoData$Response),
+                          paste0('Metastatic Melanoma, Before MAPKi Treatment, ', phenoData$Response))
+
+unique(phenoData$Group)
+
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+### Expression
+# from series matrix
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
+
+
+### Annotation
+annoData <- seriesMatrix@featureData@data
+
+idx <- grep('hsa', annoData$miRNA_ID)
+annoData <- annoData[idx,]
+
+annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = '20')[[1]][1])
+annoData$Name
+sum(annoData$Name=='NA')
+
+filter <- which(annoData$Name=='NA')
+annoData <- annoData[-filter,]
+
+exprData <- exprData[rownames(annoData),]
+dim(exprData)
+
+rownames(phenoData) == colnames(exprData)
+exprData <- exprData[,rownames(phenoData)]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData$Name
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
+
+
+#################################################################################
+### Taqman Array Human MicroRNA A Card v2.0
+
+# GSE75392
+# GSE47652
+
+gse <- 'GSE75392'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+
+seriesMatrix <- seriesMatrix[[1]]
+seriesMatrix
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+# GSE75392
+colnames(phenoData)[9] <- 'Disease.Status'
+
+phenoData$Disease.Status[phenoData$Disease.Status=='healty'] <- 'Healthy'
+phenoData$Disease.Status[phenoData$Disease.Status=='helthy'] <- 'Healthy'
+phenoData$Disease.Status[phenoData$Disease.Status=='chronic myeloid leukemia'] <- 'Chronic Myeloid Leukemia'
+
+phenoData$Source[phenoData$Source=='exosome'] <- 'Exosome'
+
+phenoData$Group <- paste0(phenoData$Disease.Status, ', ', phenoData$Source)
+
+
+# GSE47652
+colnames(phenoData)[9:11] <- c('Disease.Status','Sample.Group','Tissue')
+
+phenoData$Disease.Status <- ifelse(grepl('healthy volunteers', phenoData$Disease.Status), 'Healthy', 'Chronic Myeloid Leukemia')
+
+phenoData$Group <- phenoData$Sample.Group
+
+phenoData$Group[phenoData$Group=='sustained CMR for more than 6 months after discontinuation of imatinib (STOP-IM group)'] <- 'Chronic Myeloid Leukemia, STOP-IM'
+phenoData$Group[phenoData$Group=='receiving imatinib with CMR; undetermined minimal disease (UMD)'] <- 'Chronic Myeloid Leukemia, UMD'
+phenoData$Group[phenoData$Group=='healthy volunteers (controls)'] <- 'Healthy'
+
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Expression
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
+
+
+### Annotation
+annoData <- seriesMatrix@featureData@data
+
+rownames(exprData)==rownames(annoData)
+
+idx <- grep('hsa', annoData$miRNA_ID)
+annoData <- annoData[idx,]
+
+exprData <- exprData[rownames(annoData),]
+dim(exprData)
+
+rownames(exprData) <- annoData$Probe_ID
+
+
+### Annotation
+annoData <- readRDS(file='data/Annotation/Applied_Biosystems_TaqMan_Array_Human_MicroRNA_A_B_Cards_Set_v3.0.RDS')
+annoData
+
+#rownames(annoData) <- paste0(annoData$Assay.Name, '-', annoData$Assay.ID)
+
+#idx <- which(!rownames(annoData) %in% rownames(exprData))
+#idx
+#annoData[idx,]
+
+#filter <- which(!rownames(exprData) %in% rownames(annoData))
+#filter
+
+#exprData[filter,]
+
+#exprData <- exprData[-filter,]
+
+idx <- intersect(rownames(annoData), rownames(exprData))
+idx
+
+exprData <- exprData[idx,]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData[idx,]$Name
+
+rownames(phenoData) == colnames(exprData)
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
+
+
+
+#################################################################################
+### TaqMan Low Density Arrays Card A and B v2
+
+# GSE70080
+
+gse <- 'GSE70080'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+
+seriesMatrix <- seriesMatrix[[1]]
+seriesMatrix
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+
+# GSE70080
+colnames(phenoData)[9] <- c('Disease.Status')
+
+phenoData$Disease.Status[phenoData$Disease.Status=='COPD'] <- 'Chronic Obstructive Pulmonary Disease'
+phenoData$Disease.Status[phenoData$Disease.Status=='lung'] <- 'Lung Cancer'
+phenoData$Disease.Status[phenoData$Disease.Status=='normal'] <- 'Healthy'
+phenoData$Disease.Status[phenoData$Disease.Status=='kalibrator'] <- 'Kalibrator'
+
+phenoData$Group <- phenoData$Disease.Status
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Annotation
+annoData <- readRDS(file='data/Annotation/Applied_Biosystems_TaqMan_Array_Human_MicroRNA_A_B_Cards_Set_v3.0.RDS')
+annoData
+
+rownames(annoData) <- paste0(annoData$Assay.Name, '-', annoData$Assay.ID)
+
+idx <- grep('hsa', annoData$ID)
+annoData <- annoData[idx,]
+
+
+### Expression
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
+dim(exprData)
+
+#idx <- which(!rownames(annoData) %in% rownames(exprData))
+#idx
+#annoData[idx,]
+
+#filter <- which(!rownames(exprData) %in% rownames(annoData))
+#filter
+
+#exprData[filter,]
+
+#exprData <- exprData[-filter,]
+
+idx <- intersect(rownames(annoData), rownames(exprData))
+idx
+dim(exprData)
+
+exprData <- exprData[idx,]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData[idx,]$Name
+View(exprData)
+
+rownames(phenoData) == colnames(exprData)
+#exprData <- exprData[,rownames(phenoData)]
+
+colnames(exprData) <- rownames(phenoData)
+
+#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
+
+#View(exprData)
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
+
+
+
+
+#################################################################################
+### TaqMan microRNA Custom Low-Density Array
+
+# GSE76462
+
+gse <- 'GSE76462'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+
+seriesMatrix <- seriesMatrix[[1]]
+seriesMatrix
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+colnames(phenoData)[9:11] <- c('Screening.Group','Sample.Type','Tumor.Type')
+
+unique(phenoData$Sample.Type)
+unique(phenoData$Tumor.Type)
+
+phenoData$Disease.Status <- phenoData$Tumor.Type
+phenoData$Disease.Status[is.na(phenoData$Disease.Status)] <- 'Healthy'
+
+phenoData$Group <- phenoData$Disease.Status
+
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Expression
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
+dim(exprData)
+
+### Annotation
+annoData <- readRDS(file='data/Annotation/Applied_Biosystems_TaqMan_Array_Human_MicroRNA_A_B_Cards_Set_v3.0.RDS')
+annoData
+
+annoData$ID.2 <- paste0(gsub('\\d+$', '', annoData$ID), annoData$Assay.ID)
+annoData$ID.2
+
+#saveRDS(annoData, file='data/Annotation/Applied_Biosystems_TaqMan_Array_Human_MicroRNA_A_B_Cards_Set_v3.0.RDS')
+
+rownames(annoData) <- annoData$ID.2
+
+rownames(exprData) <- gsub('mir','miR',rownames(exprData))
+
+#rownames(exprData) <- str_extract(rownames(exprData), '\\d+$')
+
+#idx <- which(!rownames(annoData) %in% rownames(exprData))
+#idx
+#annoData[idx,]
+
+filter <- which(!rownames(exprData) %in% rownames(annoData))
+filter
+
+rownames(exprData)[filter]
+
+idx <- intersect(rownames(annoData), rownames(exprData))
+idx
+dim(exprData)
+
+exprData <- exprData[idx,]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData[idx,]$Name
+
+rownames(phenoData) == colnames(exprData)
+#exprData <- exprData[,rownames(phenoData)]
+
+colnames(exprData) <- rownames(phenoData)
+
+#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
+
+#View(exprData)
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
+
+
+#################################################################################
+### TaqMan® Array Human MicroRNA Cards Set v2.0 A/B
+
+# GSE67075
+
+gse <- 'GSE67075'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+
+seriesMatrix <- seriesMatrix[[1]]
+seriesMatrix
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+colnames(phenoData)[9:10] <- c('Disease.Status','Tissue')
+
+phenoData$Group <- phenoData$Disease.Status
+
+phenoData$Disease.Status[phenoData$Disease.Status=='Control'] <- 'Healthy'
+phenoData$Disease.Status[phenoData$Disease.Status=='Polyp'] <- 'Colon Polyp'
+phenoData$Disease.Status[grepl('CRC', phenoData$Disease.Status)] <- 'Colorectal Cancer'
+
+phenoData$Group[phenoData$Group=='Control'] <- 'Healthy'
+phenoData$Group[phenoData$Group=='Polyp'] <- 'Colon Polyp'
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Expression
+system('wget https://ftp.ncbi.nlm.nih.gov/geo/series/GSE67nnn/GSE67075/suppl/GSE67075_Normalized_data.txt.gz -P data/fromGEO/')
+system('gunzip data/fromGEO/GSE67075_Normalized_data.txt.gz')
+
+exprData <- read.delim('data/fromGEO/GSE67075_Normalized_data.txt', sep = '\t', header = T, stringsAsFactors = F)
+
+### select most informative probe, MAX IQR
+iqr <- apply(exprData[,-1], 1, function(v) IQR(v, na.rm = T))
+iqr
+
+exprData$IQR <- iqr
+
+probeIndex <- ddply(exprData, .(ID_REF), summarise, probe=which.max(IQR))
+probeIndex[1:5,]
+
+View(probeIndex)
+
+probes <- c()
+for (i in 1:nrow(probeIndex)) {
+  probe <- rownames(exprData)[which(exprData$ID_REF==probeIndex$ID_REF[i])]
+  print (probe)
+  
+  probes <- c(probes, probe[probeIndex$probe[i]])
+}
+
+filter <- which(is.na(probes))
+filter
+
+#probes <- probes[-filter]
+#probes
+
+exprData <- exprData[probes,]
+exprData
+
+rownames(exprData) <- exprData$ID_REF
+
+exprData <- exprData[,-c(1,ncol(exprData))]
+
+idx <- grep('hsa', rownames(exprData))
+exprData <- exprData[idx,]
+
+mir <- gsub('-\\d+$', '', rownames(exprData))
+mir
+
+mir <- sapply(mir, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = '15')[[1]][1])
+mir
+
+sum(mir=='NA')
+
+filter <- which(mir=='NA')
+exprData <- exprData[-filter,]
+mir <- mir[-filter]
+
+
+rownames(exprData) <- mir
+phenoData$Title==colnames(exprData)
+rownames(phenoData) == colnames(exprData)
+
+idx <- match(phenoData$Title, colnames(exprData))
+idx
+
+exprData <- exprData[,idx]
+
+colnames(exprData) <- phenoData$Accession
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
+
+
+
+#################################################################################
+### TaqMan® OpenArray® Human MicroRNA Panel (miRBase v14)
+
+# GSE63108
+
+gse <- 'GSE63108'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+seriesMatrix
+
+seriesMatrix <- seriesMatrix[[1]]
+seriesMatrix
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+colnames(phenoData)[9:10] <- c('Disease.Status', 'Tumor.Stage')
+
+phenoData$Disease.Status[phenoData$Disease.Status=='none'] <- 'Healthy'
+phenoData$Disease.Status[phenoData$Disease.Status=='non-dysplastic Barrett\'s Oesophagus'] <- 'Non-dysplastic Barretts Oesophagus'
+
+phenoData$Group <- phenoData$Disease.Status
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Expression
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
+
+
+### Annotation
+annoData <- readRDS(file='data/Annotation/Applied_Biosystems_TaqMan_Array_Human_MicroRNA_A_B_Cards_Set_v3.0.RDS')
+annoData
+
+rownames(annoData) <- paste0(annoData$Assay.ID, '_', annoData$Assay.Name)
+
+idx <- grep('hsa', annoData$ID)
+annoData <- annoData[idx,]
+View(annoData)
+
+#rownames(exprData) <- gsub('mir','miR',rownames(exprData))
+
+#rownames(exprData) <- str_extract(rownames(exprData), '^\\d+')
+
+#idx <- which(!rownames(annoData) %in% rownames(exprData))
+#idx
+#annoData[idx,]
+
+filter <- which(!rownames(exprData) %in% rownames(annoData))
+filter
+
+rownames(exprData)[filter]
+
+rownames(exprData) <- gsub('HSA-MIR', 'hsa-miR', rownames(exprData))
+
+
+idx <- intersect(rownames(annoData), rownames(exprData))
+idx
+dim(exprData)
+
+exprData <- exprData[idx,]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData[idx,]$Name
+View(exprData)
+
+rownames(phenoData) == colnames(exprData)
+#exprData <- exprData[,rownames(phenoData)]
+
+colnames(exprData) <- rownames(phenoData)
+
+#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
+
+#View(exprData)
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
 
 
 
 
 
+######################################################################################
+### State Key Laboratory Human microRNA array 1858
+
+# Release 15
+
+# GSE118613
+# GSE93850
+
+
+gse <- 'GSE118613'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+seriesMatrix
+
+seriesMatrix <- seriesMatrix[[1]]
+
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+# GSE118613
+colnames(phenoData)[9:10] <- c('Disease.Status','Tissue')
+
+unique(phenoData$Disease.Status)
+
+phenoData$Disease.Status[phenoData$Disease.Status=='normal control'] <- 'Healthy'
+phenoData$Disease.Status[phenoData$Disease.Status=='head-neck tumor'] <- 'Head and Neck Tumor'
+phenoData$Disease.Status[phenoData$Disease.Status=='nasopharyngeal carcinoma'] <- 'Nasopharyngeal Carcinoma'
+
+phenoData$Group <- phenoData$Disease.Status
+
+
+
+# GSE93850
+colnames(phenoData)[9] <- c('Disease.Status')
+
+unique(phenoData$Disease.Status)
+
+phenoData$Disease.Status[phenoData$Disease.Status=='healthy volunteer'] <- 'Healthy'
+phenoData$Disease.Status[phenoData$Disease.Status=='glioblastoma multiforme patient'] <- 'Glioblastoma Multiforme'
+
+phenoData$Group <- phenoData$Disease.Status
+
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Expression
+# from series matrix
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
+
+### Annotation
+annoData <- seriesMatrix@featureData@data
+annoData$Name <- annoData$Mature_Acc
+
+rownames(exprData) == annoData$ID
+
+exprData <- exprData[rownames(annoData),]
+dim(exprData)
+
+rownames(phenoData) == colnames(exprData)
+exprData <- exprData[,rownames(phenoData)]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData$Name
+View(exprData)
+
+filter <- which(duplicated(rownames(exprData)))
+filter
+
+exprData <- exprData[-filter,]
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
+
+
+
+######################################################################################
+### CombiMatrix_Human_1.6K_miRNA array [condensed version]
+
+# Release 11.0 (10.0 reported)
+
+# GSE16512
+
+gse <- 'GSE16512'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+seriesMatrix
+
+seriesMatrix <- seriesMatrix[[1]]
+
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+colnames(phenoData)[9:11] <- c('Sex','Tumor.Site','Tumor.Stage')
+
+phenoData$Disease.Status <- ifelse(phenoData$Tumor.Site=='Normal', 'Healthy', paste0(phenoData$Tumor.Site, ' Cancer'))
+phenoData$Group <- phenoData$Disease.Status
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Expression
+# from series matrix
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
+
+
+### Annotation
+annoData <- seriesMatrix@featureData@data
+
+idx <- grep('hsa', annoData$miRNA_ID)
+annoData <- annoData[idx,]
+
+annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = '11.0')[[1]][1])
+annoData$Name
+sum(annoData$Name=='NA')
+
+filter <- which(annoData$Name=='NA')
+annoData <- annoData[-filter,]
+
+exprData <- exprData[rownames(annoData),]
+dim(exprData)
+
+rownames(phenoData) == colnames(exprData)
+exprData <- exprData[,rownames(phenoData)]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData$Name
+View(exprData)
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
+
+
+
+######################################################################################
+### BGISEQ-500 (Homo sapiens)
+
+# GSE128004
+
+gse <- 'GSE128004'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+seriesMatrix
+
+seriesMatrix <- seriesMatrix[[1]]
+
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+colnames(phenoData)[9:11] <- c('Patient.Diagnosis','Tissue.Compartment','Tissue')
+
+phenoData$Disease.Status <- phenoData$Patient.Diagnosis
+phenoData$Disease.Status[phenoData$Disease.Status=='Normal control'] <- 'Healthy'
+phenoData$Disease.Status[phenoData$Disease.Status=='GNBi'] <- 'Ganglioneuroblastoma Intermixed'
+phenoData$Disease.Status[phenoData$Disease.Status=='NB'] <- 'Neuroblastoma'
+
+phenoData$Group <- phenoData$Disease.Status
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Expression
+
+system('wget https://ftp.ncbi.nlm.nih.gov/geo/series/GSE128nnn/GSE128004/suppl/GSE128004_RPKM-NB-exomalmiRNA.xls.gz -P data/fromGEO/')
+system('gunzip data/fromGEO/GSE128004_RPKM-NB-exomalmiRNA.xls.gz')
+
+exprData <- read_excel('data/fromGEO/GSE128004_RPKM-NB-exomalmiRNA.xls')
+
+exprData[1:5,1:5]
+
+exprData <- data.frame(exprData, stringsAsFactors = F)
+
+rownames(exprData) <- exprData$gene
+
+exprData <- exprData[,-c(1:2)]
+
+
+mir <- sapply(rownames(exprData), function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = '21')[[1]][1])
+mir
+
+sum(mir=='NA')
+
+rownames(exprData) <- mir
+
+rownames(phenoData) == colnames(exprData)
+colnames(exprData) <- phenoData$Accession
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
 
 
 
 
+######################################################################################
+### Nanostring human miRNA panel (NS_H_MIR_V3A)
+
+# Release 21
+
+# GSE112462
+
+gse <- 'GSE112462'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+seriesMatrix
+
+seriesMatrix <- seriesMatrix[[1]]
+
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+colnames(phenoData)[9:10] <- c('Cell.Type','Tissue')
+
+unique(phenoData$Cell.Type)
+
+phenoData$Disease.Status <- phenoData$Cell.Type
+phenoData$Disease.Status[phenoData$Disease.Status=='NORMAL/NONDISEASED'] <- 'Healthy'
+phenoData$Disease.Status[phenoData$Disease.Status=='ASTROCYTOMAS'] <- 'Astrocytomas'
+phenoData$Disease.Status[phenoData$Disease.Status=='OLIGODENDROGLIOMA'] <- 'Oligodendroglioma'
+phenoData$Disease.Status[phenoData$Disease.Status=='GLIOBLASTOMA'] <- 'Glioblastoma'
+
+phenoData$Group <-phenoData$Disease.Status
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Expression
+# from series matrix
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
+
+### Annotation
+annoData <- seriesMatrix@featureData@data
+
+idx <- grep('hsa', annoData$miRNA_ID)
+annoData <- annoData[idx,]
+
+annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = '21')[[1]][1])
+annoData$Name
+sum(annoData$Name=='NA')
+
+
+exprData <- exprData[rownames(annoData),]
+dim(exprData)
+
+rownames(phenoData) == colnames(exprData)
+exprData <- exprData[,rownames(phenoData)]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData$Name
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
+
+
+######################################################################################
+### Serum_microRMA
+
+# GSE101841
+
+gse <- 'GSE101841'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+seriesMatrix
+
+seriesMatrix <- seriesMatrix[[1]]
+
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+colnames(phenoData)[9:11] <- c('Tissue.Type', 'Tissue', 'Trastuzumab.Therapy')
+phenoData$Disease.Status <- 'Breast Cancer'
+
+phenoData$Group <- ifelse(phenoData$Trastuzumab.Therapy=='sensitive', 'HER2 Positive Metastatic Breast Cancer, Sensitive to Trastuzumab Therapy', 
+                          'HER2 Positive Metastatic Breast Cancer, Resistant to Trastuzumab Therapy')
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Expression
+# from series matrix
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
+
+
+### Annotation
+annoData <- seriesMatrix@featureData@data
+
+idx <- grep('hsa', annoData$miRNA_ID)
+annoData <- annoData[idx,]
+
+
+annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = '18')[[1]][1])
+annoData$Name
+sum(annoData$Name=='NA')
+
+filter <- which(annoData$Name=='NA')
+annoData <- annoData[-filter,]
+
+
+exprData <- exprData[rownames(annoData),]
+dim(exprData)
+
+rownames(phenoData) == colnames(exprData)
+exprData <- exprData[,rownames(phenoData)]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData$Name
+
+filter <- which(duplicated(rownames(exprData)))
+filter
+
+exprData <- exprData[-filter,]
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
+
+
+
+######################################################################################
+### febit Homo Sapiens miRBase 13.0
+
+# Release 15
+
+# GSE20994
+
+gse <- 'GSE20994'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+seriesMatrix
+
+seriesMatrix <- seriesMatrix[[1]]
+
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+colnames(phenoData)[9] <- 'Disease.Status'
+
+phenoData$Disease.Status <- ifelse(phenoData$Disease.Status=='normal control', 'Healthy', 'Melanoma')
+phenoData$Group <- phenoData$Disease.Status
+
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Expression
+# from series matrix
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
+
+
+### Annotation
+annoData <- seriesMatrix@featureData@data
+
+idx <- grep('hsa', annoData$miRNA_ID)
+annoData <- annoData[idx,]
+
+annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = '15')[[1]][1])
+annoData$Name
+sum(annoData$Name=='NA')
+
+filter <- which(annoData$Name=='NA')
+annoData <- annoData[-filter,]
+
+
+exprData <- exprData[rownames(annoData),]
+dim(exprData)
+
+rownames(phenoData) == colnames(exprData)
+exprData <- exprData[,rownames(phenoData)]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData$Name
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
 
 
 
 
+######################################################################################
+### febit Homo sapiens miRBase 15.0
+
+# Release 15
+
+# GSE31309
+
+gse <- 'GSE31309'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+seriesMatrix
+
+seriesMatrix <- seriesMatrix[[1]]
 
 
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
 
 
+colnames(phenoData)
+
+colnames(phenoData)[9:14] <- c('Sex','TNM.HER2.Status','TNM.N.Stage','TNM.T.Stage','TNM.Tumor.Grading','Year.of.Birth')
+phenoData$Disease.Status <- ifelse(phenoData$TNM.HER2.Status=='healthy', 'Healthy', 'Breast Cancer')
+
+phenoData$Group <- phenoData$Disease.Status
+phenoData$Group[phenoData$TNM.HER2.Status=='negative'] <- 'Breast Cancer, HER2 Negative'
+phenoData$Group[phenoData$TNM.HER2.Status=='positive'] <- 'Breast Cancer, HER2 Positive'
 
 
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
 
 
+### Expression
+# from series matrix
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
 
+
+### Annotation
+annoData <- seriesMatrix@featureData@data
+
+idx <- grep('hsa', annoData$miRNA_ID)
+annoData <- annoData[idx,]
+
+annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = '15')[[1]][1])
+annoData$Name
+sum(annoData$Name=='NA')
+
+
+exprData <- exprData[rownames(annoData),]
+dim(exprData)
+
+rownames(phenoData) == colnames(exprData)
+exprData <- exprData[,rownames(phenoData)]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData$Name
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
+
+
+######################################################################################
+### Illumina Human v2 MicroRNA expression beadchip
+
+# Release 15, some v11.0, 9.1
+
+# GSE25609
+# GSE41526
+# GSE22981
+
+gse <- 'GSE22981'
+
+seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
+
+length(seriesMatrix)
+
+seriesMatrix <- seriesMatrix[[1]]
+
+
+### Phenotype
+phenoData <- pData(seriesMatrix)
+phenoData <- getPhenoFun(phenoData)
+
+phenoData$Data.Processing[1]
+phenoData$Source
+
+# GSE25609
+colnames(phenoData)[9:10] <- c('Group', 'Tissue')
+
+unique(phenoData$Group)
+
+phenoData$Disease.Status <- phenoData$Group
+
+phenoData$Disease.Status[grepl('Control', phenoData$Disease.Status)] <- 'Healthy'
+phenoData$Disease.Status[grepl('Adenoma', phenoData$Disease.Status)] <- 'Advanced Adenoma'
+phenoData$Disease.Status[grepl('colorectal', phenoData$Disease.Status)] <- 'Colorectal Cancer'
+
+phenoData$Group[phenoData$Group=='Control'] <- 'Healthy'
+phenoData$Group[phenoData$Group=='Advanced Adenoma after removal'] <- 'Advanced Adenoma After Removal'
+phenoData$Group[phenoData$Group=='colorectal cancer'] <- 'Colorectal Cancer'
+phenoData$Group[phenoData$Group=='colorectal cancer after surgical intervention'] <- 'Colorectal Cancer After Surgical Intervention'
+
+# GSE41526
+colnames(phenoData)[9:11] <- c('Sex', 'Sample.Type', 'Tissue')
+
+unique(phenoData$Sample.Type)
+phenoData$Disease.Status <- phenoData$Sample.Type
+
+phenoData$Disease.Status[grepl('control', phenoData$Disease.Status)] <- 'Healthy'
+phenoData$Disease.Status[grepl('breast cancer', phenoData$Disease.Status)] <- 'Breast Cancer'
+phenoData$Disease.Status[grepl('lung cancer', phenoData$Disease.Status)] <- 'Lung Cancer'
+phenoData$Disease.Status[grepl('colon cancer', phenoData$Disease.Status)] <- 'Colon Cancer'
+
+phenoData$Group <- phenoData$Disease.Status
+
+phenoData$Group[phenoData$Sample.Type=='pre-resection breast cancer'] <- 'Breast Cancer, Pre-resection'
+phenoData$Group[phenoData$Sample.Type=='post-resection breast cancer'] <- 'Breast Cancer, Post-resection'
+
+
+# GSE22981
+colnames(phenoData)[9:11] <- c('Disease.Status', 'Race', 'Tissue')
+
+phenoData$Disease.Status <- ifelse(phenoData$Disease.Status=='Control', 'Healthy', 'Breast Cancer')
+phenoData$Group <- phenoData$Disease.Status
+
+platform <- seriesMatrix@annotation
+platform
+
+saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
+
+
+### Expression
+# from series matrix
+exprData <- exprs(seriesMatrix)
+exprData[1:5,1:5]
+
+
+### Annotation
+annoData <- seriesMatrix@featureData@data
+
+View(annoData)
+idx <- grep('hsa', annoData$miRNA_ID)
+annoData <- annoData[idx,]
+
+filter <- grep(':', annoData$miRNA_ID)
+filter
+annoData <- annoData[-filter,]
+
+annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = '15')[[1]][1])
+annoData$Name
+sum(annoData$Name=='NA')
+
+filter <- which(annoData$Name=='NA')
+annoData <- annoData[-filter,]
+
+
+saveRDS(annoData, file='data/Annotation/Illumina_Human_v2_MicroRNA_expression_beadchip.RDS')
+
+exprData <- exprData[rownames(annoData),]
+dim(exprData)
+
+rownames(phenoData) == colnames(exprData)
+exprData <- exprData[,rownames(phenoData)]
+
+rownames(annoData) == rownames(exprData)
+sum(rownames(annoData) == rownames(exprData))
+dim(exprData)
+
+rownames(exprData) <- annoData$Name
+
+saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
+
+
+### eSet
+eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                      phenoData = AnnotatedDataFrame(phenoData),
+                      #featureData = annoData,
+                      annotation = platform)
+
+saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
 
 
 ####################################################################################################################################################
 
 
-
+####################################################################################################################################################
 
 
 
@@ -3435,816 +5044,13 @@ saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
 
 
 
-#################################################################################
-### TaqMan Low Density Arrays Card A and B v2
 
-# GSE70080
 
-gse <- 'GSE70080'
 
-seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
 
-length(seriesMatrix)
 
-seriesMatrix <- seriesMatrix[[1]]
-seriesMatrix
 
-### Phenotype
-phenoData <- pData(seriesMatrix)
-phenoData <- getPhenoFun(phenoData)
 
-View(phenoData)
-
-phenoData$Data.Processing[1]
-phenoData$Source
-
-### Annotation
-annoData <- readRDS(file='data/Annotation/Applied_Biosystems_TaqMan_Array_Human_MicroRNA_A_B_Cards_Set_v3.0.RDS')
-annoData
-
-rownames(annoData) <- paste0(annoData$Assay.Name, '-', annoData$Assay.ID)
-
-
-platform <- seriesMatrix@annotation
-platform
-
-saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
-
-
-### Expression
-
-exprData <- exprs(seriesMatrix)
-
-exprData[1:5,1:5]
-min(exprData)
-max(exprData)
-
-View(exprData)
-dim(exprData)
-
-idx <- which(!rownames(annoData) %in% rownames(exprData))
-idx
-annoData[idx,]
-
-filter <- which(!rownames(exprData) %in% rownames(annoData))
-filter
-
-exprData[filter,]
-
-exprData <- exprData[-filter,]
-
-idx <- intersect(rownames(annoData), rownames(exprData))
-idx
-dim(exprData)
-
-exprData <- exprData[idx,]
-
-rownames(annoData) == rownames(exprData)
-sum(rownames(annoData) == rownames(exprData))
-dim(exprData)
-
-rownames(exprData) <- annoData[idx,]$Name
-View(exprData)
-
-rownames(phenoData) == colnames(exprData)
-#exprData <- exprData[,rownames(phenoData)]
-
-colnames(exprData) <- rownames(phenoData)
-
-#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
-
-#View(exprData)
-
-saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
-
-
-### eSet
-eSet <- ExpressionSet(assayData = as.matrix(exprData),
-                      phenoData = AnnotatedDataFrame(phenoData),
-                      #featureData = annoData,
-                      annotation = platform)
-
-saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
-
-
-
-
-
-
-#################################################################################
-### TaqMan microRNA Custom Low-Density Array
-
-# GSE76462
-
-gse <- 'GSE76462'
-
-seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
-
-length(seriesMatrix)
-
-seriesMatrix <- seriesMatrix[[1]]
-seriesMatrix
-
-### Phenotype
-phenoData <- pData(seriesMatrix)
-phenoData <- getPhenoFun(phenoData)
-
-View(phenoData)
-
-phenoData$Data.Processing[1]
-phenoData$Source
-
-### Annotation
-annoData <- readRDS(file='data/Annotation/Applied_Biosystems_TaqMan_Array_Human_MicroRNA_A_B_Cards_Set_v3.0.RDS')
-annoData
-
-rownames(annoData) <- annoData$Assay.ID
-
-rownames(annoData) <- paste0(annoData$Assay.Name, '-', annoData$Assay.ID)
-
-
-platform <- seriesMatrix@annotation
-platform
-
-saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
-
-
-### Expression
-
-exprData <- exprs(seriesMatrix)
-
-exprData[1:5,1:5]
-min(exprData)
-max(exprData)
-
-View(exprData)
-dim(exprData)
-
-rownames(exprData) <- gsub('mir','miR',rownames(exprData))
-
-rownames(exprData) <- str_extract(rownames(exprData), '\\d+$')
-
-idx <- which(!rownames(annoData) %in% rownames(exprData))
-idx
-annoData[idx,]
-
-filter <- which(!rownames(exprData) %in% rownames(annoData))
-filter
-
-idx <- intersect(rownames(annoData), rownames(exprData))
-idx
-dim(exprData)
-
-exprData <- exprData[idx,]
-
-rownames(annoData) == rownames(exprData)
-sum(rownames(annoData) == rownames(exprData))
-dim(exprData)
-
-rownames(exprData) <- annoData[idx,]$Name
-View(exprData)
-
-rownames(phenoData) == colnames(exprData)
-#exprData <- exprData[,rownames(phenoData)]
-
-colnames(exprData) <- rownames(phenoData)
-
-#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
-
-#View(exprData)
-
-saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
-
-
-### eSet
-eSet <- ExpressionSet(assayData = as.matrix(exprData),
-                      phenoData = AnnotatedDataFrame(phenoData),
-                      #featureData = annoData,
-                      annotation = platform)
-
-saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
-
-
-
-#################################################################################
-### Applied Biosystems Taqman Low Density Array Human microRNA Card A, Applied Biosystems Taqman Low Density Array Human microRNA Card B
-
-# GSE46355
-
-gse <- 'GSE46355'
-
-seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
-
-length(seriesMatrix)
-seriesMatrix
-
-seriesMatrix <- seriesMatrix[[2]]
-seriesMatrix
-
-### Phenotype
-phenoData <- pData(seriesMatrix)
-phenoData <- getPhenoFun(phenoData)
-
-View(phenoData)
-
-phenoData$Data.Processing[1]
-phenoData$Source
-
-### Annotation
-annoData <- readRDS(file='data/Annotation/Applied_Biosystems_TaqMan_Array_Human_MicroRNA_A_B_Cards_Set_v3.0.RDS')
-annoData
-
-rownames(annoData) <- str_extract(rownames(annoData), '\\d+$')
-
-#rownames(annoData) <- paste0(annoData$Assay.Name, '-', annoData$Assay.ID)
-
-
-platform <- seriesMatrix@annotation
-platform
-
-saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
-
-
-### Expression
-
-exprData <- exprs(seriesMatrix)
-
-exprData[1:5,1:5]
-min(exprData)
-max(exprData)
-
-View(exprData)
-dim(exprData)
-
-rownames(exprData) <- gsub('mir','miR',rownames(exprData))
-
-rownames(exprData) <- str_extract(rownames(exprData), '\\d+$')
-
-idx <- which(!rownames(annoData) %in% rownames(exprData))
-idx
-annoData[idx,]
-
-filter <- which(!rownames(exprData) %in% rownames(annoData))
-filter
-
-exprData[filter,]
-
-
-idx <- intersect(rownames(annoData), rownames(exprData))
-idx
-dim(exprData)
-
-exprData <- exprData[idx,]
-
-rownames(annoData) == rownames(exprData)
-sum(rownames(annoData) == rownames(exprData))
-dim(exprData)
-
-rownames(exprData) <- annoData[idx,]$Name
-View(exprData)
-
-rownames(phenoData) == colnames(exprData)
-#exprData <- exprData[,rownames(phenoData)]
-
-colnames(exprData) <- rownames(phenoData)
-
-#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
-
-#View(exprData)
-
-saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
-
-
-### eSet
-eSet <- ExpressionSet(assayData = as.matrix(exprData),
-                      phenoData = AnnotatedDataFrame(phenoData),
-                      #featureData = annoData,
-                      annotation = platform)
-
-saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
-
-
-
-#################################################################################
-### TaqMan® OpenArray® Human MicroRNA Panel (miRBase v14)
-
-# GSE63108
-
-gse <- 'GSE63108'
-
-seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
-
-length(seriesMatrix)
-seriesMatrix
-
-seriesMatrix <- seriesMatrix[[1]]
-seriesMatrix
-
-### Phenotype
-phenoData <- pData(seriesMatrix)
-phenoData <- getPhenoFun(phenoData)
-
-View(phenoData)
-
-phenoData$Data.Processing[1]
-phenoData$Source
-
-### Annotation
-annoData <- readRDS(file='data/Annotation/Applied_Biosystems_TaqMan_Array_Human_MicroRNA_A_B_Cards_Set_v3.0.RDS')
-annoData
-
-rownames(annoData) <- annoData$Assay.ID
-
-#rownames(annoData) <- paste0(annoData$Assay.Name, '-', annoData$Assay.ID)
-
-
-platform <- seriesMatrix@annotation
-platform
-
-saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
-
-
-### Expression
-
-exprData <- exprs(seriesMatrix)
-
-exprData[1:5,1:5]
-min(exprData)
-max(exprData)
-
-View(exprData)
-dim(exprData)
-
-rownames(exprData) <- gsub('mir','miR',rownames(exprData))
-
-rownames(exprData) <- str_extract(rownames(exprData), '^\\d+')
-
-idx <- which(!rownames(annoData) %in% rownames(exprData))
-idx
-annoData[idx,]
-
-filter <- which(!rownames(exprData) %in% rownames(annoData))
-filter
-
-exprData[filter,]
-
-
-idx <- intersect(rownames(annoData), rownames(exprData))
-idx
-dim(exprData)
-
-exprData <- exprData[idx,]
-
-rownames(annoData) == rownames(exprData)
-sum(rownames(annoData) == rownames(exprData))
-dim(exprData)
-
-rownames(exprData) <- annoData[idx,]$Name
-View(exprData)
-
-rownames(phenoData) == colnames(exprData)
-#exprData <- exprData[,rownames(phenoData)]
-
-colnames(exprData) <- rownames(phenoData)
-
-#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
-
-#View(exprData)
-
-saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
-
-
-### eSet
-eSet <- ExpressionSet(assayData = as.matrix(exprData),
-                      phenoData = AnnotatedDataFrame(phenoData),
-                      #featureData = annoData,
-                      annotation = platform)
-
-saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
-
-
-
-######################################################################################
-### Illumina Human v2 MicroRNA expression beadchip
-
-# Release 15, some v11.0, 9.1
-
-# GSE25609
-# GSE41526
-
-
-gse <- 'GSE41526'
-
-seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
-
-length(seriesMatrix)
-
-seriesMatrix <- seriesMatrix[[1]]
-
-
-### Phenotype
-phenoData <- pData(seriesMatrix)
-phenoData <- getPhenoFun(phenoData)
-
-View(phenoData)
-
-phenoData$Data.Processing[1]
-phenoData$Source
-
-
-### Annotation
-annoData <- seriesMatrix@featureData@data
-
-View(annoData)
-idx <- grep('hsa', annoData$miRNA_ID)
-annoData <- annoData[idx,]
-
-filter <- grep(':', annoData$miRNA_ID)
-filter
-annoData <- annoData[-filter,]
-
-annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = '15')[[1]][1])
-annoData$Name
-sum(annoData$Name=='NA')
-
-filter <- which(annoData$Name=='NA')
-annoData <- annoData[-filter,]
-
-
-saveRDS(annoData, file='data/Annotation/Illumina_Human_v2_MicroRNA_expression_beadchip.RDS')
-
-platform <- seriesMatrix@annotation
-platform
-
-saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
-
-
-### Expression
-# from series matrix
-exprData <- exprs(seriesMatrix)
-exprData[1:5,1:5]
-
-exprData <- exprData[rownames(annoData),]
-dim(exprData)
-
-rownames(phenoData) == colnames(exprData)
-exprData <- exprData[,rownames(phenoData)]
-
-rownames(annoData) == rownames(exprData)
-sum(rownames(annoData) == rownames(exprData))
-dim(exprData)
-
-rownames(exprData) <- annoData$Name
-View(exprData)
-
-#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
-
-#View(exprData)
-
-saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
-
-
-### eSet
-eSet <- ExpressionSet(assayData = as.matrix(exprData),
-                      phenoData = AnnotatedDataFrame(phenoData),
-                      #featureData = annoData,
-                      annotation = platform)
-
-saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
-
-
-
-
-
-
-
-
-
-######################################################################################
-### State Key Laboratory Human microRNA array 1858
-
-# Release 15
-
-# GSE118613
-# GSE93850
-
-
-gse <- 'GSE93850'
-
-seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
-
-length(seriesMatrix)
-seriesMatrix
-
-seriesMatrix <- seriesMatrix[[1]]
-
-
-### Phenotype
-phenoData <- pData(seriesMatrix)
-phenoData <- getPhenoFun(phenoData)
-
-View(phenoData)
-
-phenoData$Data.Processing[1]
-phenoData$Source
-
-
-### Annotation
-annoData <- seriesMatrix@featureData@data
-annoData$Name <- annoData$Mature_Acc
-
-platform <- seriesMatrix@annotation
-platform
-
-saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
-
-
-### Expression
-# from series matrix
-exprData <- exprs(seriesMatrix)
-exprData[1:5,1:5]
-
-rownames(exprData) == annoData$ID
-
-exprData <- exprData[rownames(annoData),]
-dim(exprData)
-
-rownames(phenoData) == colnames(exprData)
-exprData <- exprData[,rownames(phenoData)]
-
-rownames(annoData) == rownames(exprData)
-sum(rownames(annoData) == rownames(exprData))
-dim(exprData)
-
-rownames(exprData) <- annoData$Name
-View(exprData)
-
-filter <- which(duplicated(rownames(exprData)))
-filter
-
-exprData <- exprData[-filter,]
-
-
-#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
-
-#View(exprData)
-
-saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
-
-
-### eSet
-eSet <- ExpressionSet(assayData = as.matrix(exprData),
-                      phenoData = AnnotatedDataFrame(phenoData),
-                      #featureData = annoData,
-                      annotation = platform)
-
-saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
-
-
-
-######################################################################################
-### CombiMatrix_Human_1.6K_miRNA array [condensed version]
-
-# Release 11.0 (10.0 reported)
-
-# GSE16512
-
-gse <- 'GSE16512'
-
-seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
-
-length(seriesMatrix)
-seriesMatrix
-
-seriesMatrix <- seriesMatrix[[1]]
-
-
-### Phenotype
-phenoData <- pData(seriesMatrix)
-phenoData <- getPhenoFun(phenoData)
-
-View(phenoData)
-
-phenoData$Data.Processing[1]
-phenoData$Source
-
-
-### Annotation
-annoData <- seriesMatrix@featureData@data
-
-View(annoData)
-idx <- grep('hsa', annoData$miRNA_ID)
-annoData <- annoData[idx,]
-
-annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = '11.0')[[1]][1])
-annoData$Name
-sum(annoData$Name=='NA')
-
-filter <- which(annoData$Name=='NA')
-annoData <- annoData[-filter,]
-
-
-#saveRDS(annoData, file='data/Annotation/Exiqon_LNA_RT-PCR_Human_panels_1_2.RDS')
-
-platform <- seriesMatrix@annotation
-platform
-
-saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
-
-
-### Expression
-# from series matrix
-exprData <- exprs(seriesMatrix)
-exprData[1:5,1:5]
-
-exprData <- exprData[rownames(annoData),]
-dim(exprData)
-
-rownames(phenoData) == colnames(exprData)
-exprData <- exprData[,rownames(phenoData)]
-
-rownames(annoData) == rownames(exprData)
-sum(rownames(annoData) == rownames(exprData))
-dim(exprData)
-
-rownames(exprData) <- annoData$Name
-View(exprData)
-
-#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
-
-#View(exprData)
-
-saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
-
-
-### eSet
-eSet <- ExpressionSet(assayData = as.matrix(exprData),
-                      phenoData = AnnotatedDataFrame(phenoData),
-                      #featureData = annoData,
-                      annotation = platform)
-
-saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
-
-######################################################################################
-### Nanostring human miRNA panel (NS_H_MIR_V3A)
-
-# Release 21
-
-# GSE112462
-
-gse <- 'GSE112462'
-
-seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
-
-length(seriesMatrix)
-seriesMatrix
-
-seriesMatrix <- seriesMatrix[[1]]
-
-
-### Phenotype
-phenoData <- pData(seriesMatrix)
-phenoData <- getPhenoFun(phenoData)
-
-View(phenoData)
-
-phenoData$Data.Processing[1]
-phenoData$Source
-
-
-### Annotation
-annoData <- seriesMatrix@featureData@data
-
-View(annoData)
-idx <- grep('hsa', annoData$miRNA_ID)
-annoData <- annoData[idx,]
-
-annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = '21')[[1]][1])
-annoData$Name
-sum(annoData$Name=='NA')
-
-
-#saveRDS(annoData, file='data/Annotation/Exiqon_LNA_RT-PCR_Human_panels_1_2.RDS')
-
-platform <- seriesMatrix@annotation
-platform
-
-saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
-
-
-### Expression
-# from series matrix
-exprData <- exprs(seriesMatrix)
-exprData[1:5,1:5]
-
-exprData <- exprData[rownames(annoData),]
-dim(exprData)
-
-rownames(phenoData) == colnames(exprData)
-exprData <- exprData[,rownames(phenoData)]
-
-rownames(annoData) == rownames(exprData)
-sum(rownames(annoData) == rownames(exprData))
-dim(exprData)
-
-rownames(exprData) <- annoData$Name
-View(exprData)
-
-#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
-
-#View(exprData)
-
-saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
-
-
-### eSet
-eSet <- ExpressionSet(assayData = as.matrix(exprData),
-                      phenoData = AnnotatedDataFrame(phenoData),
-                      #featureData = annoData,
-                      annotation = platform)
-
-saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
-
-
-######################################################################################
-### febit Homo sapiens miRBase 15.0
-
-# Release 15
-
-# GSE31309
-
-gse <- 'GSE31309'
-
-seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
-
-length(seriesMatrix)
-seriesMatrix
-
-seriesMatrix <- seriesMatrix[[1]]
-
-
-### Phenotype
-phenoData <- pData(seriesMatrix)
-phenoData <- getPhenoFun(phenoData)
-
-View(phenoData)
-
-phenoData$Data.Processing[1]
-phenoData$Source
-
-
-### Annotation
-annoData <- seriesMatrix@featureData@data
-
-View(annoData)
-idx <- grep('hsa', annoData$miRNA_ID)
-annoData <- annoData[idx,]
-
-annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = '15')[[1]][1])
-annoData$Name
-sum(annoData$Name=='NA')
-
-
-#saveRDS(annoData, file='data/Annotation/Exiqon_LNA_RT-PCR_Human_panels_1_2.RDS')
-
-platform <- seriesMatrix@annotation
-platform
-
-saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
-
-
-### Expression
-# from series matrix
-exprData <- exprs(seriesMatrix)
-exprData[1:5,1:5]
-
-exprData <- exprData[rownames(annoData),]
-dim(exprData)
-
-rownames(phenoData) == colnames(exprData)
-exprData <- exprData[,rownames(phenoData)]
-
-rownames(annoData) == rownames(exprData)
-sum(rownames(annoData) == rownames(exprData))
-dim(exprData)
-
-rownames(exprData) <- annoData$Name
-View(exprData)
-
-#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
-
-#View(exprData)
-
-saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
-
-
-### eSet
-eSet <- ExpressionSet(assayData = as.matrix(exprData),
-                      phenoData = AnnotatedDataFrame(phenoData),
-                      #featureData = annoData,
-                      annotation = platform)
-
-saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
 
 
 
@@ -4333,99 +5139,6 @@ eSet <- ExpressionSet(assayData = as.matrix(exprData),
                       annotation = platform)
 
 saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
-
-
-######################################################################################
-### Serum_microRMA
-
-# Release 15 (13.0 reported)
-
-# GSE101841
-
-gse <- 'GSE101841'
-
-seriesMatrix <- getGEO(gse, AnnotGPL = FALSE, getGPL = TRUE, GSEMatrix = TRUE, destdir = 'data/fromGEO') # AnnotGPL = TRUE
-
-length(seriesMatrix)
-seriesMatrix
-
-seriesMatrix <- seriesMatrix[[1]]
-
-
-### Phenotype
-phenoData <- pData(seriesMatrix)
-phenoData <- getPhenoFun(phenoData)
-
-View(phenoData)
-
-phenoData$Data.Processing[1]
-phenoData$Source
-
-
-### Annotation
-annoData <- seriesMatrix@featureData@data
-
-View(annoData)
-idx <- grep('hsa', annoData$miRNA_ID)
-annoData <- annoData[idx,]
-
-
-annoData$Name <- sapply(annoData$miRNA_ID, function(x) mirIDNameConversionFun(id = x, to = 'name2id', version = '18')[[1]][1])
-annoData$Name
-sum(annoData$Name=='NA')
-
-filter <- which(annoData$Name=='NA')
-annoData <- annoData[-filter,]
-
-
-#saveRDS(annoData, file='data/Annotation/Exiqon_LNA_RT-PCR_Human_panels_1_2.RDS')
-
-platform <- seriesMatrix@annotation
-platform
-
-saveRDS(phenoData, file=paste0('data/rData/', gse, '_', platform, '_Sample_Information.RDS'))
-
-
-### Expression
-# from series matrix
-exprData <- exprs(seriesMatrix)
-exprData[1:5,1:5]
-
-exprData <- exprData[rownames(annoData),]
-dim(exprData)
-
-rownames(phenoData) == colnames(exprData)
-exprData <- exprData[,rownames(phenoData)]
-
-rownames(annoData) == rownames(exprData)
-sum(rownames(annoData) == rownames(exprData))
-dim(exprData)
-
-rownames(exprData) <- annoData$Name
-View(exprData)
-
-
-filter <- which(duplicated(rownames(exprData)))
-filter
-
-exprData <- exprData[-filter,]
-
-#exprData <- data.frame(ID=annoData$miRNA,exprData, stringsAsFactors = F)
-
-#View(exprData)
-
-saveRDS(exprData, file=paste0('data/rData/', gse, '_', platform, '_Expression.RDS'))
-
-
-### eSet
-eSet <- ExpressionSet(assayData = as.matrix(exprData),
-                      phenoData = AnnotatedDataFrame(phenoData),
-                      #featureData = annoData,
-                      annotation = platform)
-
-saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
-
-
 
 
 
@@ -4547,8 +5260,6 @@ eSet <- ExpressionSet(assayData = as.matrix(exprData),
                       annotation = platform)
 
 saveRDS(eSet, file=paste0('data/rData/', gse, '_', platform, '_eSet.RDS'))
-
-
 
 
 
