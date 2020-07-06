@@ -201,9 +201,9 @@ tab_home <- fluidRow(
     
     valueBox(value = '21', color = 'teal', width = 3,
              subtitle = tags$p(strong("Cancer types"), style = "font-size: 200%;"),  icon = icon("dna")),
-    valueBox(value = '80', color = 'teal', width = 3,
+    valueBox(value = '88', color = 'teal', width = 3,
              subtitle = tags$p(strong("Studies"), style = "font-size: 200%;"), icon = icon("database")),
-    valueBox(value = '26,072', color = 'teal', width = 3,
+    valueBox(value = '31,933', color = 'teal', width = 3,
              subtitle = tags$p(strong("Samples"), style = "font-size: 200%;"),  icon = icon("user-circle"))
     
     
@@ -292,13 +292,8 @@ project.id <- selectizeInput(inputId = "project.id", label=NULL,# h4(strong('miR
                           ))
 
 
-datasets <- readRDS('shinyApp/data/CCMA_Datasets.RDS')
-
-eSet <- readRDS('shinyApp/data/GSE73002_GPL18941_eSet.RDS')
-expr <- exprs(eSet)
-meta <- pData(eSet)
-
-colnames(meta)[9] <- 'Sample.Type'
+ccma.datasets <- readRDS('shinyApp/data/CCMA_Datasets.RDS')
+ccma.primary <- readRDS('shinyApp/data/CCMA_Datasets_Primary.RDS')
 
 meta.tcga <- readRDS('shinyApp/data/Metadata_TCGA.RDS')
 expr.tcga <- readRDS('shinyApp/data/miRNA_Expression_TCGA.RDS')
@@ -307,6 +302,10 @@ projects.tcga <- meta.tcga %>% group_by(project_id) %>%
   summarise(group=length(unique(sample_type)))
 
 projects.tcga <- sort(projects.tcga[projects.tcga$group==2,]$project_id)
+
+
+expr.ccma <- readRDS('shinyApp/data/CCMA_Expression.RDS')
+meta.ccma <- readRDS('shinyApp/data/CCMA_Metadata.RDS')
 
 
 tab_browser <- fluidRow(
@@ -373,7 +372,7 @@ tab_datasets <- fluidRow(
     title = NULL, status = "primary", solidHeader = FALSE, collapsible = FALSE,
     width = 12, 
     
-    DT::dataTableOutput("datasets")
+    DT::dataTableOutput("analysis_datasets")
     
   ),
   
@@ -414,111 +413,23 @@ tab_datasets <- fluidRow(
                     #                     status = "primary", solidHeader = TRUE, collapsible = TRUE,
                     #                     width = 4,
                     #                     height = 400,
-                    #                     plotOutput('pie_sample_type')
+                    #                     plotOutput('pie_disease_status')
                     #                 )
                     #),
                     
-                    box(title = 'Sample Type',
+                    box(title = 'Disease Status',
                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
-                        width = 4,
-                        height = 400,
-                        plotOutput('pie_sample_type')
+                        width = 6,
+                        height = 500,
+                        plotOutput('pie_disease_status')
                     ),
                     
-                    conditionalPanel(condition = "input.datasets_rows_selected==1 || input.datasets_rows_selected==5 || input.datasets_rows_selected==12",
-                                     box(title = 'Pathological T Stage', 
-                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
-                                         width = 4,
-                                         height = 400,
-                                         plotOutput('pie_pstage')
-                                     )
+                    box(title = 'Subgroups',
+                        status = "primary", solidHeader = TRUE, collapsible = TRUE,
+                        width = 6,
+                        height = 500,
+                        plotOutput('pie_group')
                     ),
-                    
-                    conditionalPanel(condition = "input.datasets_rows_selected==1 || input.datasets_rows_selected==2 || input.datasets_rows_selected==3",
-                                     box(title = 'Clinical T Stage', 
-                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
-                                         width = 4,
-                                         height = 400,
-                                         plotOutput('pie_cstage')
-                                     )
-                    ),
-                    
-                    conditionalPanel(condition = "input.datasets_rows_selected!=3 && input.datasets_rows_selected<10",
-                                     box(title = 'Preoperative PSA', 
-                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
-                                         width = 4,
-                                         height = 400,
-                                         plotOutput('bar_psa')
-                                     )
-                    ),
-                    
-                    conditionalPanel(condition = "input.datasets_rows_selected<12 && input.datasets_rows_selected!=2 && input.datasets_rows_selected!=10 && 
-                                     input.datasets_rows_selected!=11",
-                                     box(title = 'Gleason Score', 
-                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
-                                         width = 4,
-                                         height = 400,
-                                         plotOutput('bar_gleason')
-                                     )
-                    ),
-                    
-                    conditionalPanel(condition = "input.datasets_rows_selected==1",
-                                     box(title = 'Overall Survival Status', 
-                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
-                                         width = 4,
-                                         height = 400,
-                                         plotOutput('pie_os_status')
-                                     )
-                    ),
-                    
-                    conditionalPanel(condition = "input.datasets_rows_selected==1",
-                                     box(title = 'Overall Survival', 
-                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
-                                         width = 4,
-                                         height = 400,
-                                         plotOutput('km_os_time')
-                                     )
-                    ),
-                    
-                    conditionalPanel(condition = "input.datasets_rows_selected<=12",
-                                     box(title = 'Relapse-free Survival Status', 
-                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
-                                         width = 4,
-                                         height = 400,
-                                         plotOutput('pie_bcr_status')
-                                     )
-                    ),
-                    
-                    
-                    conditionalPanel(condition = "input.datasets_rows_selected<=10",
-                                     box(title = 'Relapse-free Survival', 
-                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
-                                         width = 4,
-                                         height = 400,
-                                         plotOutput('km_bcr_time')
-                                     )
-                    ),
-                    
-                    
-                    conditionalPanel(condition = "input.datasets_rows_selected==10 || input.datasets_rows_selected==12 || input.datasets_rows_selected==13 || 
-                                     input.datasets_rows_selected==14",
-                                     box(title = 'Metastasis-free Survival Status', 
-                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
-                                         width = 4,
-                                         height = 400,
-                                         plotOutput('pie_metastasis_status')
-                                     )
-                    ),
-                    
-                    conditionalPanel(condition = "input.datasets_rows_selected==10",
-                                     box(title = 'Metastasis-free Survival', 
-                                         status = "primary", solidHeader = TRUE, collapsible = TRUE,
-                                         width = 4,
-                                         height = 400,
-                                         plotOutput('km_metastasis_time')
-                                     )
-                    )#,
-                    
                     
                     #box(title = 'Preop PSA', 
                     #     status = "primary", solidHeader = TRUE, collapsible = TRUE,
@@ -527,11 +438,18 @@ tab_datasets <- fluidRow(
                     #     plotOutput('pie_psa')
                     # ),
                     
+                    box(title = NULL,
+                        status = "primary", solidHeader = FALSE, collapsible = TRUE,
+                        width = 12,
+                        height = 600,
+                        htmlOutput("gse")
+                    )
                     
                     #htmlOutput("gse")
                     
+                    
                     #splitLayout(cellWidths = c("50%", "50%"), 
-                    #             plotOutput('pie_sample_type'), 
+                    #             plotOutput('pie_disease_status'), 
                     #             plotOutput('pie_gleason')),
   ),
   
@@ -549,6 +467,10 @@ tab_datasets <- fluidRow(
                               selected = 'Primary',
                               inline = TRUE),
            
+           selectInput("deg.test", "Methods", width = 300,
+                       c("T test" = "t",
+                         "Wilcoxon test" = "wilcox",
+                         "Limma" = "limma")),
            
            sliderInput(inputId = "foldchange", label = h5(strong('Fold Change')), 
                        min = 0, max = 3,  step = 0.1, value = 2, width = 300),
@@ -667,6 +589,9 @@ server <- function(input, output, session) {
   updateSelectizeInput(session, 'project.id', choices = projects.tcga, selected = project.default, server = TRUE)
   
   
+  ################################################################
+  ######################## Information ###########################
+  
   output$mir.name <- renderUI({ 
     mir.id <- input$mir.id
     mir.name <- mir.annotation[mir.id, 'Name']
@@ -719,6 +644,11 @@ server <- function(input, output, session) {
     tagList("Targets:", mir.encori, mir.mirdb, mir.mirtarbase, mir.targetscan, mir.dianatarbase)
   })
   
+  
+  #########################################################
+  ######################## TCGA ###########################
+  
+  
   output$tcga_boxplot <- renderPlot({
     
     mir.id <- input$mir.id
@@ -758,41 +688,90 @@ server <- function(input, output, session) {
   })
   
   
+  ########################################################################
+  ######################## GENE-LEVEL ANALYSIS ###########################
   
-  
-  output$browser_datasets <- DT::renderDataTable({datasets},
+  output$browser_datasets <- DT::renderDataTable({ccma.primary},
                                                  options = list(pageLength = 5),
                                                  selection = list(mode='multiple', selected=1)
   )
   
-  
+
   output$mir_boxplot <- renderPlot({
     
     mir.id <- input$mir.id
     #gene.symbol <- gene.annotation$external_gene_name[which(gene.annotation$ensembl_id==gene.id)]
     
     #grp <- group.expression()
-    group <- meta[,'Sample.Type']
-    expr <- expr[mir.id,]
-    dataset <- 'GSE73002'
     
-    dataForBoxPlot <- data.frame(expr, group, dataset)
-
+    idx <- input$browser_datasets_rows_selected
+    datasets <- as.character(ccma.datasets[idx,'Dataset'])
+    
+    group <- c()
+    expr <- c()
+    dataset <- c()
+    for (dt in datasets) {
+      group <- c(group, meta.ccma[[dt]][,'Disease.Status'])
+      expr <- c(expr, expr.ccma[[dt]][mir.id,])
+      dataset <- c(dataset, rep(dt, nrow(meta.ccma[[dt]])))
+      
+    }
+    
+    dataForBoxPlot <- data.frame(expr=unlist(expr), group=unlist(group), dataset, 
+                                 stringsAsFactors = F)
+    
     p <- boxplotFun(dataForBoxPlot)
     p
   })
   
   
-  output$datasets <- DT::renderDataTable({datasets},
+  ###########################################################################
+  ######################## DATASET-LEVEL ANALYSIS ###########################
+  
+  output$analysis_datasets <- DT::renderDataTable({ccma.primary},
                                          options = list(pageLength = 5),
                                          selection = list(mode='single', selected=1)
   )
   
-  output$pie_sample_type <- renderPlot({
-    #idx <- input$dataset_rows_selected
-    #accession <- as.character(datasets[idx,'Accession'])
+  
+  output$dataset_summary <- renderText({ 
+    idx <- input$analysis_datasets_rows_selected
+    dataset_summary <- as.character(paste0(ccma.datasets[idx,'Accession'], ': ', ccma.datasets[idx,'Title']))
+    dataset_summary
+  })
+  
+  
+  output$gse <- renderUI({
     
-    sample.freq <- table(meta$Sample.Type)
+    idx <- input$analysis_datasets_rows_selected
+    link <- as.character(ccma.datasets[idx,'Links'])
+    
+    tags$iframe(src=link, seamless="seamless", width='100%', height='600')
+  })
+  
+  
+  
+  output$pie_disease_status <- renderPlot({
+    idx <- input$analysis_datasets_rows_selected
+    dataset <- as.character(ccma.datasets[idx,'Dataset'])
+    
+    meta <- meta.ccma[[dataset]]
+    
+    sample.freq <- table(meta$Disease.Status)
+    dataForPiePlot <- data.frame(num=as.numeric(sample.freq), sam=names(sample.freq))
+    
+    p <- pieplotFun(dataForPiePlot)
+    
+    p
+  })
+  
+  output$pie_group <- renderPlot({
+    idx <- input$analysis_datasets_rows_selected
+    dataset <- as.character(ccma.datasets[idx,'Dataset'])
+    
+    meta <- meta.ccma[[dataset]]
+    
+    sample.freq <- table(meta$Group)
     dataForPiePlot <- data.frame(num=as.numeric(sample.freq), sam=names(sample.freq))
     
     p <- pieplotFun(dataForPiePlot)
@@ -801,18 +780,30 @@ server <- function(input, output, session) {
   })
   
   
-  output$dataset_summary <- renderText({ 
-    idx <- input$datasets_rows_selected
-    dataset_summary <- as.character(paste0(datasets[idx,'Accession'], ': ', datasets[idx,'Title']))
-    dataset_summary
-  })
+  
+  #############################################################
+  ######################## DOWNLOAD ###########################
+  
+  shinyInput <- function(FUN, len, id, ...) {
+    inputs <- character(len)
+    for (i in seq_len(len)) {
+      inputs[i] <- as.character(FUN(paste0(id, i), ...))
+    }
+    inputs
+  }
   
   
+  download_datatable <- reactive(data.frame(ccma.primary,
+                                            ExpressionSet=shinyInput(downloadButton, 88,
+                                                                     'button_',
+                                                                     label='Download',
+                                                                     onclick = sprintf("Shiny.setInputValue('%s', this.id)","select_button")
+                                                                     )
+                                            )
+  )
   
   
-  
-  
-  output$download <- DT::renderDataTable({datasets},
+  output$download <- DT::renderDataTable({download_datatable()},
                                         options = list(pageLength = 100, fixedHeader=TRUE,
                                                        #autoWidth = TRUE,
                                                        #columnDefs = list(list(width = '50px', targets = c(2,3,4,6))), # "_all"
@@ -820,8 +811,43 @@ server <- function(input, output, session) {
                                                          "function(settings, json) {",
                                                          "$(this.api().table().header()).css({'background-color': '#20B2AA', 'color': '#fff'});",
                                                          "}")),
+                                        escape = FALSE,
                                         selection = list(mode='none')
   )
+  
+  # observeEvent(input$select_button, {
+  #   print(input$select_button)
+  # })
+  
+  # lapply(1:88, function(i){
+  #   output[[paste0("button_",i)]] <- downloadHandler(
+  #     filename = function() {
+  #       paste('data-', Sys.Date(), '.txt', sep='')
+  #     },
+  #     content = function(file) {
+  #       write.table(x = iris, file = file)
+  #     }
+  #   )
+  # })
+  
+  
+  lapply(1:88, function(i){
+    output[[paste0("button_",i)]] <- downloadHandler(
+      filename = function() {
+        paste0(ccma.datasets$Accession[i], '_', ccma.datasets$Annotation[i], '_ExpressionSet.RDS')
+      },
+      content = function(file) {
+        exprData <- expr.ccma[[ccma.datasets$Dataset[i]]]
+        metaData <- meta.ccma[[ccma.datasets$Dataset[i]]]
+        platform <- ccma.datasets$Annotation[i]
+        eSet <- ExpressionSet(assayData = as.matrix(exprData),
+                              phenoData = AnnotatedDataFrame(metaData),
+                              #featureData = annoData,
+                              annotation = platform)
+        saveRDS(eSet, file)
+      }
+    )
+  })
   
 }
 
