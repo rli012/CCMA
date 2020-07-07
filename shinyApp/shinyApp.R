@@ -17,6 +17,8 @@ library(DT)
 library(dplyr)
 library(pROC)
 library(ROCR)
+library(digest)
+library(pheatmap)
 
 
 library(dashboardthemes)
@@ -454,35 +456,47 @@ tab_datasets <- fluidRow(
   ),
   
   tabPanel(title = "Differential Expression Analysis", value = 'sample_type',
-           checkboxGroupInput(inputId = "control_sample_type", label = "Control group",
-                              choices = c('Normal', 
-                                          'Primary Tumor' = 'Primary',
-                                          'Metastasis'),
-                              selected = 'Normal',
-                              inline = TRUE),
-           checkboxGroupInput(inputId = "case_sample_type", label = "Case group",
-                              choices = c('Normal',
-                                          'Primary Tumor' = 'Primary',
-                                          'Metastasis'),
-                              selected = 'Primary',
-                              inline = TRUE),
            
-           selectInput("deg.test", "Methods", width = 300,
-                       c("T test" = "t",
-                         "Wilcoxon test" = "wilcox",
-                         "Limma" = "limma")),
+           column(6, br(), DT::dataTableOutput("groups")),
            
-           sliderInput(inputId = "foldchange", label = h5(strong('Fold Change')), 
-                       min = 0, max = 3,  step = 0.1, value = 2, width = 300),
+           # checkboxGroupInput(inputId = "control_sample_type", label = "Control group",
+           #                    choices = c('Normal', 
+           #                                'Primary Tumor' = 'Primary',
+           #                                'Metastasis'),
+           #                    selected = 'Normal',
+           #                    inline = TRUE),
+           # checkboxGroupInput(inputId = "case_sample_type", label = "Case group",
+           #                    choices = c('Normal',
+           #                                'Primary Tumor' = 'Primary',
+           #                                'Metastasis'),
+           #                    selected = 'Primary',
+           #                    inline = TRUE),
            
-           sliderInput(inputId = "fdr", label = h5(strong('BH Adjusted P Value')), 
-                       min = 0, max = 0.1,  step = 0.01, value = 0.01, width = 300),
+           column(1, br()),
+           
+           column(4, br(), 
+                  selectInput("deg.test", "Method", width = 300,
+                              c("T test" = "t",
+                                "Wilcoxon test" = "wilcox",
+                                "Limma" = "limma")),
+                  
+                  sliderInput(inputId = "foldchange", label = h5(strong('Fold Change')), 
+                              min = 0, max = 3,  step = 0.1, value = 2, width = 300),
+                  
+                  sliderInput(inputId = "fdr", label = h5(strong('BH Adjusted P Value')), 
+                              min = 0, max = 0.1,  step = 0.01, value = 0.01, width = 300),
+                  
+                  br(),
+                  
+                  actionButton(inputId = 'deg.submit', label = strong('Submit'), icon=icon("check"), width = 300)
+                  
+                  ),
            
            
-           column(4, br(), plotOutput('volcano_sample_type', height = 500)),
-           column(6, br(), DT::dataTableOutput("table_sample_type"))
-           
-           
+           column(12, hr(),
+                  column(4, br(), plotOutput('volcano_sample_type', height = 500)),
+                  column(6, br(), DT::dataTableOutput("table_sample_type"))
+                  )
            
   ),
   
@@ -497,22 +511,42 @@ tab_datasets <- fluidRow(
   
   tabPanel("Hierarchical Clustering", 
            
-           sliderInput("psa", 
-                       "Preoperative PSA Value", 
-                       min = 0,
-                       max = 50, 
-                       value = 4,
-                       width = 500)
+           column(3, #offset = 1,
+                  checkboxGroupInput(inputId = "cluster", label =  h5(strong('Cluster')),
+                                     choices = c('Row', 'Column'), selected = 'Column',
+                                     inline = TRUE),
+                  checkboxGroupInput(inputId = "names", label = h5(strong('Name')),
+                                     choices = c('Row', 'Column'), selected = NULL,
+                                     inline = TRUE),
+                  
+                  sliderInput(inputId = "font.row", label = h5(strong('Font size (Row)')), 
+                              min = 1, max = 20,  value = 10, width = 200),
+                  
+                  sliderInput(inputId = "font.column", label = h5(strong('Font size (Column)')), 
+                              min = 1, max = 20,  value = 14, width = 200),
+                  
+                  radioButtons(inputId = "angle.column", label = "Angle (Column)",
+                               c(0, 45, 90), selected = 45,
+                               inline = TRUE)
+           ),
+           
+           
+           column(9,
+                  plotOutput("heatmap")
+           )
+           
   ),
   
   tabPanel("PC Analysis", 
            
-           sliderInput("psa", 
-                       "Preoperative PSA Value", 
-                       min = 0,
-                       max = 50, 
-                       value = 4,
-                       width = 500)
+           column(3
+                  
+           ),
+           
+           column(9,
+                  plotOutput("pca")
+           )
+           
   ),
   
   
@@ -533,13 +567,13 @@ tab_datasets <- fluidRow(
 )
 
 
-
 tab_download <- fluidRow(
   box(
     title = NULL, status = "primary", solidHeader = FALSE, collapsible = FALSE,
     width = 12, 
     
     DT::dataTableOutput("download")
+    
     
   )
   
@@ -585,9 +619,13 @@ ui <- dashboardPage(title='CCMA', header, sidebar, body) # skin = 'blue',
 ######## Server
 
 server <- function(input, output, session) { 
+  
   updateSelectizeInput(session, 'mir.id', choices = mir.annotation, selected = mir.default, server = TRUE)
   updateSelectizeInput(session, 'project.id', choices = projects.tcga, selected = project.default, server = TRUE)
   
+  #ns <- session$ns
+  
+  seed <- reactiveVal()
   
   ################################################################
   ######################## Information ###########################
@@ -648,45 +686,49 @@ server <- function(input, output, session) {
   #########################################################
   ######################## TCGA ###########################
   
-  
-  output$tcga_boxplot <- renderPlot({
+  observeEvent(input$mir.id, {
+    output$tcga_boxplot <- renderPlot({
+      
+      mir.id <- input$mir.id
+      mir.name <- mir.annotation[mir.id, 'Name']
+      #gene.symbol <- gene.annotation$external_gene_name[which(gene.annotation$ensembl_id==gene.id)]
+      
+      #grp <- group.expression()
+      group <- meta.tcga[,'sample_type']
+      expr <- expr.tcga[mir.id,]
+      project <- meta.tcga[,'project_id']
+      
+      dataForBoxPlot <- data.frame(expr, group, project, mir.name)
+      
+      p <- tcgaboxplotFun(dataForBoxPlot)
+      p
+    })
     
-    mir.id <- input$mir.id
-    mir.name <- mir.annotation[mir.id, 'Name']
-    #gene.symbol <- gene.annotation$external_gene_name[which(gene.annotation$ensembl_id==gene.id)]
+    observeEvent(input$project.id, {
+      output$tcga_rocplot <- renderPlot({
+        
+        mir.id <- input$mir.id
+        mir.name <- mir.annotation[mir.id, 'Name']
+        #gene.symbol <- gene.annotation$external_gene_name[which(gene.annotation$ensembl_id==gene.id)]
+        
+        #grp <- group.expression()
+        project.id <- input$project.id
+        idx <- meta.tcga$project_id==project.id
+        
+        group <- meta.tcga[idx,'sample_type']
+        expr <- expr.tcga[mir.id,idx]
+        
+        dataForROCPlot <- data.frame(expr, group)
+        dataForROCPlot$group <- factor(dataForROCPlot$group, levels = c('Normal','Tumor'))
+        
+        p <- rocplotFun(dataForROCPlot)
+        p
+      })
+      
+    })
     
-    #grp <- group.expression()
-    group <- meta.tcga[,'sample_type']
-    expr <- expr.tcga[mir.id,]
-    project <- meta.tcga[,'project_id']
-    
-    dataForBoxPlot <- data.frame(expr, group, project, mir.name)
-    
-    p <- tcgaboxplotFun(dataForBoxPlot)
-    p
   })
-  
-  
-  output$tcga_rocplot <- renderPlot({
     
-    mir.id <- input$mir.id
-    mir.name <- mir.annotation[mir.id, 'Name']
-    #gene.symbol <- gene.annotation$external_gene_name[which(gene.annotation$ensembl_id==gene.id)]
-    
-    #grp <- group.expression()
-    project.id <- input$project.id
-    idx <- meta.tcga$project_id==project.id
-    
-    group <- meta.tcga[idx,'sample_type']
-    expr <- expr.tcga[mir.id,idx]
-    
-    dataForROCPlot <- data.frame(expr, group)
-    dataForROCPlot$group <- factor(dataForROCPlot$group, levels = c('Normal','Tumor'))
-    
-    p <- rocplotFun(dataForROCPlot)
-    p
-  })
-  
   
   ########################################################################
   ######################## GENE-LEVEL ANALYSIS ###########################
@@ -696,33 +738,37 @@ server <- function(input, output, session) {
                                                  selection = list(mode='multiple', selected=1)
   )
   
-
-  output$mir_boxplot <- renderPlot({
-    
-    mir.id <- input$mir.id
-    #gene.symbol <- gene.annotation$external_gene_name[which(gene.annotation$ensembl_id==gene.id)]
-    
-    #grp <- group.expression()
-    
-    idx <- input$browser_datasets_rows_selected
-    datasets <- as.character(ccma.datasets[idx,'Dataset'])
-    
-    group <- c()
-    expr <- c()
-    dataset <- c()
-    for (dt in datasets) {
-      group <- c(group, meta.ccma[[dt]][,'Disease.Status'])
-      expr <- c(expr, expr.ccma[[dt]][mir.id,])
-      dataset <- c(dataset, rep(dt, nrow(meta.ccma[[dt]])))
+  
+  observeEvent(input$browser_datasets_rows_selected, {
+    output$mir_boxplot <- renderPlot({
       
-    }
+      mir.id <- input$mir.id
+      #gene.symbol <- gene.annotation$external_gene_name[which(gene.annotation$ensembl_id==gene.id)]
+      
+      #grp <- group.expression()
+      
+      idx <- input$browser_datasets_rows_selected
+      datasets <- as.character(ccma.datasets[idx,'Dataset'])
+      
+      group <- c()
+      expr <- c()
+      dataset <- c()
+      for (dt in datasets) {
+        group <- c(group, meta.ccma[[dt]][,'Disease.Status'])
+        expr <- c(expr, expr.ccma[[dt]][mir.id,])
+        dataset <- c(dataset, rep(dt, nrow(meta.ccma[[dt]])))
+        
+      }
+      
+      dataForBoxPlot <- data.frame(expr=unlist(expr), group=unlist(group), dataset, 
+                                   stringsAsFactors = F)
+      
+      p <- boxplotFun(dataForBoxPlot)
+      p
+    })
     
-    dataForBoxPlot <- data.frame(expr=unlist(expr), group=unlist(group), dataset, 
-                                 stringsAsFactors = F)
-    
-    p <- boxplotFun(dataForBoxPlot)
-    p
   })
+  
   
   
   ###########################################################################
@@ -733,51 +779,299 @@ server <- function(input, output, session) {
                                          selection = list(mode='single', selected=1)
   )
   
-  
-  output$dataset_summary <- renderText({ 
-    idx <- input$analysis_datasets_rows_selected
-    dataset_summary <- as.character(paste0(ccma.datasets[idx,'Accession'], ': ', ccma.datasets[idx,'Title']))
-    dataset_summary
-  })
-  
-  
-  output$gse <- renderUI({
+  observeEvent(input$analysis_datasets_rows_selected, {
     
     idx <- input$analysis_datasets_rows_selected
-    link <- as.character(ccma.datasets[idx,'Links'])
+    req(idx)
     
-    tags$iframe(src=link, seamless="seamless", width='100%', height='600')
-  })
-  
-  
-  
-  output$pie_disease_status <- renderPlot({
-    idx <- input$analysis_datasets_rows_selected
     dataset <- as.character(ccma.datasets[idx,'Dataset'])
     
     meta <- meta.ccma[[dataset]]
+    expr <- expr.ccma[[dataset]]
     
-    sample.freq <- table(meta$Disease.Status)
-    dataForPiePlot <- data.frame(num=as.numeric(sample.freq), sam=names(sample.freq))
+    seed(sample(1e9,1))
     
-    p <- pieplotFun(dataForPiePlot)
+    groups <- meta$Group
     
-    p
+    group.levels <- unlist(sapply(ccma.datasets[idx,'Group'], 
+                                  function(x) strsplit(x, '; ')[[1]]))
+    groups <- factor(groups, levels = group.levels)
+
+    groups <- as.data.frame(table(groups), stringsAsFactors=F)
+    
+    groups <- cbind(t(sapply(groups[,1], function(x) sprintf('<input type="radio" name="%s" value="%s"/>', digest(x,algo='murmur32',seed=seed()), 1:2))), groups, stringsAsFactors=F)
+    colnames(groups) <- c('Case','Control','Groups','N')
+    
+    #groups <- groups[order(groups$N,decreasing=T),]
+    #print(groups)
+    #TODO too many groups need different approach. (issue is too much overhead to client side and it's not intuitive
+    #groups <- groups[seq(min(nrow(groups),100)),]
+    #print(dim(groups))
+    #shownGroups(groups)
+    output$groups <- DT::renderDataTable(groups, rownames = FALSE, escape = FALSE, selection = 'none', server = FALSE,
+                                         options=list(dom = 'tp', paging = TRUE, pageLength = 100, #ordering = FALSE,
+                                                      initComplete = JS("
+                                                                        function(setting, json) {
+                                                                        $(this.api().table().container())
+                                                                        .find('div.dataTables_paginate')
+                                                                        .css('display', this.api().page.info().pages <= 1 ? 'none' : 'block');
+                                                                        }"))
+                                         )
+          # drawCallback = JS("
+          #                   function(settings) {
+          #                   Shiny.unbindAll(this.api().table().node());
+          #                   Shiny.bindAll(this.api().table().node());
+          #                   }")
+          # ),
+          # callback = JS("
+          #               table.rows().every(function(i, tab, row) {
+          #               var $this = $(this.node());
+          #               //$(\"input[name='\" + this.data()[2] + \"']\").prop('checked', false);
+          #               //console.log($this.children()[0]);
+          #               //console.log($.parseHTML(this.data()[0])[0].name);
+          #               $this.attr('id', $.parseHTML(this.data()[0])[0].name); //one time hash value
+          #               //$this.attr('id', this.data()[2]); //Group Name
+          #               $this.addClass('shiny-input-radiogroup');
+          #               //console.log($this.prop('checked'));
+          #               });
+          #               Shiny.unbindAll(table.table().node());
+          #               Shiny.bindAll(table.table().node());
+          #               "
+          #               )
+          # 
+          # 
+          # )
+    
+    
+    output$dataset_summary <- renderText({ 
+      dataset_summary <- as.character(paste0(ccma.datasets[idx,'Accession'], ': ', ccma.datasets[idx,'Title']))
+      dataset_summary
+    })
+    
+    
+    output$gse <- renderUI({
+      link <- as.character(ccma.datasets[idx,'Links'])
+      tags$iframe(src=link, seamless="seamless", width='100%', height='600')
+    })
+    
+    
+    output$pie_disease_status <- renderPlot({
+      sample.freq <- table(meta$Disease.Status)
+      dataForPiePlot <- data.frame(num=as.numeric(sample.freq), sam=names(sample.freq))
+      
+      p <- pieplotFun(dataForPiePlot)
+      p
+    })
+    
+    output$pie_group <- renderPlot({
+      sample.freq <- table(meta$Group)
+      dataForPiePlot <- data.frame(num=as.numeric(sample.freq), sam=names(sample.freq))
+      
+      p <- pieplotFun(dataForPiePlot)
+      p
+    })
+    
+    
+    observeEvent(input$deg.submit, {
+      
+      deg.group <- meta$Group
+      
+      # group[group %in% input$control_group] <- 'Control'
+      # group[group %in% input$case_group] <- 'Case'
+      
+      deg.group <- ifelse(deg.group=='Healthy', 'Control', 'Case')
+      
+      deg.group <- factor(deg.group)
+      
+      design <- model.matrix(~0+deg.group)
+      colnames(design) <- levels(deg.group)
+      
+      contrast.matrix <- makeContrasts(contrasts='Case - Control',
+                                       levels=design)
+      contrast.matrix
+      
+      ### Differential gene expression analysis (limma)
+      
+      fit <- lmFit(expr, design)
+      fit2 <- contrasts.fit(fit, contrast.matrix)
+      fit2 <- eBayes(fit2)
+      
+      dgeTable <- topTable(fit2, coef=1, n=Inf, adjust.method='BH', sort.by='p')
+      
+      dataForVolcanoPlot <- dgeTable
+      
+      logFcThreshold <- log2(input$foldchange)
+      adjPvalThreshold <- input$fdr
+      
+      dataForVolcanoPlot$Significance[with(dataForVolcanoPlot, 
+                                           logFC < logFcThreshold | adj.P.Val > adjPvalThreshold)] <- 'NS'
+      dataForVolcanoPlot$Significance[with(dataForVolcanoPlot, 
+                                           logFC >= logFcThreshold & adj.P.Val <= adjPvalThreshold)] <- 'UP'
+      dataForVolcanoPlot$Significance[with(dataForVolcanoPlot, 
+                                           logFC <= -logFcThreshold & adj.P.Val <= adjPvalThreshold)] <- 'DOWN'
+      
+      
+      output$volcano_sample_type <- renderPlot({
+        
+        p <- ggplot(dataForVolcanoPlot, aes(x = logFC, y = -log10(adj.P.Val))) +
+          #xlim(-2,2) +
+          labs(x=expression('log'[2]*'(Fold Change)'), 
+               y=(expression('-log'[10]*'(FDR)')), 
+               title=NULL) +
+          geom_point(aes(color=Significance), alpha=1, size=2) +
+          geom_vline(xintercept = c(-logFcThreshold, logFcThreshold),
+                     color='darkgreen', linetype='dashed') +
+          geom_hline(yintercept = -log10(adjPvalThreshold), 
+                     color='darkgreen',linetype='dashed')+
+          #scale_x_continuous(breaks=c(-4,-2,0,2,4,6,8,10)) +
+          #scale_y_continuous(expand = c(0.3, 0)) +
+          #scale_color_manual(values = c('#4285F4',"gray", '#FBBC05')) +
+          scale_color_manual(values = c(google.green,"gray", google.red)) +
+          #facet_wrap(~Comparison, ncol = 2) +
+          #geom_text_repel(data = subset(dataForVolcanoPlot, 
+          #                              adj.P.Val < adjPvalThreshold & logFC > logFcThreshold), 
+          #                segment.alpha = 0.4, aes(label = Symbol), 
+          #                size = 3.5, color='red', segment.color = 'black') +
+          #geom_text_repel(data = subset(dataForVolcanoPlot, 
+          #                              adj.P.Val < adjPvalThreshold & logFC < logFcThreshold*-1), 
+          #                segment.alpha = 0.4, aes(label = Symbol), 
+          #                size = 3.5, color='green3', segment.color = 'black') +
+          
+          theme_bw() +
+          theme(axis.line = element_blank(),
+                #panel.grid.major = element_blank(),
+                #panel.grid.minor = element_blank(),
+                panel.border = element_blank(),
+                panel.background = element_blank()) +
+          theme(legend.position="none") +
+          theme(axis.text=element_text(size=14),
+                axis.title=element_text(size=16),
+                strip.text = element_text(size=14, face='bold')) +
+          theme(plot.margin =  margin(t = 0.25, r = 0.25, b = 0.25, l = 0.25, unit = "cm"))
+        
+        
+        p
+        
+        
+      })
+      
+      
+      output$table_sample_type <- DT::renderDataTable({
+        
+        dataForVolcanoPlot[,-ncol(dataForVolcanoPlot)] <- apply(dataForVolcanoPlot[,-ncol(dataForVolcanoPlot)], 2, 
+                                                                function(v) format(as.numeric(v), digits=3))
+        dataForVolcanoPlot
+        
+        
+      })
+      
+    })
+    
+    
+    output$heatmap <- renderPlot({
+      #req(input$file.upload)
+      
+      dataForHeatmap <- t(scale(t(expr)))
+      
+      sample.annotation <- data.frame(Group=meta$Group, Disease.Status=meta$Disease.Status,
+                                      row.names = colnames(dataForHeatmap), stringsAsFactors = F)
+      sample.annotation$Group <- factor(sample.annotation$Group, levels = group.levels)
+      
+      mx <- max(dataForHeatmap, na.rm = T)
+      
+      cluster.row <- cluster.col <- name.row <- name.col <- F
+      
+      if ('Row' %in% input$cluster) {
+        cluster.row = T
+      }
+      
+      if ('Column' %in% input$cluster) {
+        cluster.col = T
+      }
+      
+      if ('Row' %in% input$names) {
+        name.row = T
+      }
+      
+      if ('Column' %in% input$names) {
+        name.col = T
+      }
+      
+      p <- pheatmap(dataForHeatmap,
+                    scale = 'none',
+                    cluster_cols = cluster.col,
+                    border_color = NA,
+                    cluster_rows = cluster.row,
+                    #treeheight_row = 0,
+                    show_rownames = name.row,
+                    show_colnames = name.col,
+                    fontsize_row = input$font.row, 
+                    fontsize_col = input$font.column,
+                    angle_col = input$angle.column, 
+                    annotation_col = sample.annotation,
+                    #annotation_legend = T,
+                    breaks = c(seq(-1*mx,mx, 2*mx/100)),
+                    color=col_fun
+      )
+      
+      p
+      
+    }) # }, height = 700, width = 700)
+    
+    
+    output$pca <- renderPlot({
+      #req(input$file.upload)
+      
+      dataForPCA <- t(scale(t(expr)))
+      
+      pcaResults <- prcomp(dataForPCA)
+      sumpca <- summary(pcaResults)
+      
+      pc1 <- round(sumpca$importance[2,1]*100,2)
+      pc2 <- round(sumpca$importance[2,2]*100,2)
+      
+      pcDf <- data.frame(PC1=pcaResults$rotation[,1],
+                         PC2=pcaResults$rotation[,2],
+                         Sample=rownames(pcaResults$rotation),
+                         Group=factor(meta$Group, levels=group.levels),
+                         Disease.Status=meta$Disease.Status,
+                         stringsAsFactors = F)
+      
+      p <- ggplot(pcDf, aes(PC1, PC2, shape = Disease.Status, color = Group)) + #, shape = "Group"
+        theme_bw() +
+        #scale_alpha_manual(values = c(0.4, 1)) +
+        #scale_color_manual(values = google.colors) +
+        #scale_shape_manual(values = shapeScale) +
+        #scale_size_manual(values = c(3,7)) +
+        geom_point(size = 5) +
+        labs(x=paste0('PC1 (', pc1, '%)'), y=paste0('PC2 (', pc2, '%)')) +
+        # geom_text_repel(aes(label = extractSampleName(Sample)), size = 2) +
+        guides(color = guide_legend(order = 1, override.aes = list(size = 2)),
+               shape = guide_legend(order = 2, override.aes = list(size = 4))) +
+        #       shape = guide_legend(order = 3, override.aes = list(size = 3)),
+        #       size = guide_legend(order = 4)) +
+        theme(legend.title = element_text(size = 15, face = 'bold'),
+              legend.text = element_text(size = 13),
+              axis.title = element_text(size = 15),
+              axis.text = element_text(size = 15))
+      
+      p
+      
+      
+    }) # }, height = 700, width = 700)
+    
+    
+    
+    
   })
   
-  output$pie_group <- renderPlot({
-    idx <- input$analysis_datasets_rows_selected
-    dataset <- as.character(ccma.datasets[idx,'Dataset'])
-    
-    meta <- meta.ccma[[dataset]]
-    
-    sample.freq <- table(meta$Group)
-    dataForPiePlot <- data.frame(num=as.numeric(sample.freq), sam=names(sample.freq))
-    
-    p <- pieplotFun(dataForPiePlot)
-    
-    p
-  })
+  
+  
+  
+  
+  
+  
+  
   
   
   
@@ -792,12 +1086,11 @@ server <- function(input, output, session) {
     inputs
   }
   
-  
   download_datatable <- reactive(data.frame(ccma.primary,
                                             ExpressionSet=shinyInput(downloadButton, 88,
                                                                      'button_',
-                                                                     label='Download',
-                                                                     onclick = sprintf("Shiny.setInputValue('%s', this.id)","select_button")
+                                                                     label='Download'#,
+                                                                     #onclick = sprintf("Shiny.setInputValue('%s', this.id)","select_button")
                                                                      )
                                             )
   )
@@ -815,22 +1108,7 @@ server <- function(input, output, session) {
                                         selection = list(mode='none')
   )
   
-  # observeEvent(input$select_button, {
-  #   print(input$select_button)
-  # })
-  
-  # lapply(1:88, function(i){
-  #   output[[paste0("button_",i)]] <- downloadHandler(
-  #     filename = function() {
-  #       paste('data-', Sys.Date(), '.txt', sep='')
-  #     },
-  #     content = function(file) {
-  #       write.table(x = iris, file = file)
-  #     }
-  #   )
-  # })
-  
-  
+
   lapply(1:88, function(i){
     output[[paste0("button_",i)]] <- downloadHandler(
       filename = function() {
@@ -848,6 +1126,7 @@ server <- function(input, output, session) {
       }
     )
   })
+
   
 }
 
