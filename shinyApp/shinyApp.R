@@ -455,6 +455,16 @@ tab_datasets <- fluidRow(
                     #             plotOutput('pie_gleason')),
   ),
   
+  tabPanel("Highly Expressed miRNAs", 
+           radioButtons(inputId = "gleason_control", label = "Control group",
+                        c('6=3+3', '7=3+4','7=4+3','8=4+4','9=4+5','9=5+4','10=5+5'),
+                        inline = TRUE),
+           radioButtons(inputId = "gleason_case", label = "Case group",
+                        c('6=3+3', '7=3+4','7=4+3','8=4+4','9=4+5','9=5+4','10=5+5'),
+                        inline = TRUE)
+  ),
+  
+  
   tabPanel(title = "Differential Expression Analysis", value = 'sample_type',
            
            column(6, br(), DT::dataTableOutput("groups")),
@@ -500,12 +510,21 @@ tab_datasets <- fluidRow(
            
   ),
   
-  tabPanel("Highly Expressed miRNAs", 
-           radioButtons(inputId = "gleason_control", label = "Control group",
-                        c('6=3+3', '7=3+4','7=4+3','8=4+4','9=4+5','9=5+4','10=5+5'),
+  tabPanel("ROC Analysis", 
+           radioButtons(inputId = "stage_control", label = "Control group",
+                        c('Stage I', 'Stage II','Stage III','Stage IV'),
                         inline = TRUE),
-           radioButtons(inputId = "gleason_case", label = "Case group",
-                        c('6=3+3', '7=3+4','7=4+3','8=4+4','9=4+5','9=5+4','10=5+5'),
+           radioButtons(inputId = "stage_case", label = "Case group",
+                        c('Stage I', 'Stage II','Stage III','Stage IV'),
+                        inline = TRUE)
+  ),
+  
+  tabPanel("Feature Selection", 
+           radioButtons(inputId = "stage_control", label = "Control group",
+                        c('Stage I', 'Stage II','Stage III','Stage IV'),
+                        inline = TRUE),
+           radioButtons(inputId = "stage_case", label = "Case group",
+                        c('Stage I', 'Stage II','Stage III','Stage IV'),
                         inline = TRUE)
   ),
   
@@ -547,17 +566,6 @@ tab_datasets <- fluidRow(
                   plotOutput("pca")
            )
            
-  ),
-  
-  
-  
-  tabPanel("ROC Analysis", 
-           radioButtons(inputId = "stage_control", label = "Control group",
-                        c('Stage I', 'Stage II','Stage III','Stage IV'),
-                        inline = TRUE),
-           radioButtons(inputId = "stage_case", label = "Case group",
-                        c('Stage I', 'Stage II','Stage III','Stage IV'),
-                        inline = TRUE)
   )
   
   )
@@ -966,7 +974,6 @@ server <- function(input, output, session) {
       })
       
     })
-    
     
     output$heatmap <- renderPlot({
       #req(input$file.upload)
