@@ -978,7 +978,9 @@ server <- function(input, output, session) {
     output$heatmap <- renderPlot({
       #req(input$file.upload)
       
-      dataForHeatmap <- t(scale(t(expr)))
+      idx <- 1:50
+      
+      dataForHeatmap <- t(scale(t(expr[1:50,])))
       
       sample.annotation <- data.frame(Group=meta$Group, Disease.Status=meta$Disease.Status,
                                       row.names = colnames(dataForHeatmap), stringsAsFactors = F)
@@ -1029,7 +1031,9 @@ server <- function(input, output, session) {
     output$pca <- renderPlot({
       #req(input$file.upload)
       
-      dataForPCA <- t(scale(t(expr)))
+      filter <- which(rowSums(is.na(expr))>0)
+
+      dataForPCA <- t(scale(t(expr[-filter,])))
       
       pcaResults <- prcomp(dataForPCA)
       sumpca <- summary(pcaResults)
